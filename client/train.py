@@ -285,14 +285,19 @@ if __name__ == "__main__":
 
     # ── Test weight serialisation ─────────────────────────────────────────────
     import tempfile
-    with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as tmp:
-        save_weights(state_dict, tmp.name)
-        model2  = TransformerClassifier()
-        model2  = load_weights(tmp.name, model2)
-        state2  = model2.state_dict()
+    # Use delete=False and close before loading — required on Windows
+    tmp = tempfile.NamedTemporaryFile(suffix=".pt", delete=False)
+    tmp_path = tmp.name
+    tmp.close()                          # close handle before writing
+    try:
+        save_weights(state_dict, tmp_path)
+        model2 = TransformerClassifier()
+        model2 = load_weights(tmp_path, model2)
+        state2 = model2.state_dict()
         for k in state_dict:
             assert torch.allclose(state_dict[k], state2[k]), f"Weight mismatch after save/load: {k}"
-        os.unlink(tmp.name)
+    finally:
+        os.unlink(tmp_path)              # guaranteed cleanup even if assertion fails
 
     print()
     print("=" * PRINT_WIDTH)

@@ -10,6 +10,8 @@ Spec reference: TRD Section 6.2
     - Additional metrics: Precision, Recall, F1 (per class + macro)
     - Validation set    : 2,000 samples held on coordinator
     - Called after      : every FedAvg round + pretrain baseline verification
+
+    IMPORTANT RUN : python client/evaluate.py data
 """
 
 import torch

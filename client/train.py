@@ -15,6 +15,8 @@ Returns to client.py:
     samples_trained : total samples processed (used for credit calculation)
     time_seconds    : wall-clock training time
     final_loss      : average loss of the last epoch
+
+    IMPORTANT RUN : python client/train.py data
 """
 
 import time

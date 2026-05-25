@@ -162,7 +162,7 @@ def pretrain(
     # Learning rate scheduler — reduces LR by 50% if val loss stops improving
     # Helps squeeze out extra accuracy in later epochs
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimiser, mode="max", factor=0.5, patience=1, verbose=False
+        optimiser, mode="max", factor=0.5, patience=1
     )
 
     # ── Training loop ─────────────────────────────────────────────────────────

@@ -3,14 +3,19 @@ import datetime
 import torch
 from flask import Flask, request, jsonify, send_file
 
-# Import the custom modules provided by the CS team [cite: 2, 266-267]
+# Import internal modules [cite: 2, 266-267]
 import fedavg
 import credits
+import evaluate
 
 app = Flask(__name__)
 
+# --- PATH CONFIGURATION ---
+# Ensures the server always looks in the exact folder where server.py lives
+COORDINATOR_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(COORDINATOR_DIR, 'global_model.pt')
+
 # --- Global State Machine ---
-# Tracks the state of the federated learning loop [cite: 1, 121-125]
 current_round = 1
 TOTAL_ROUNDS = 5  # Configured per TRD spec [cite: 2, 303-305]
 registered_clients = set()
@@ -18,20 +23,50 @@ round_status = 'active'
 global_accuracy = 0.0
 round_start_time = datetime.datetime.now()
 
-# Dictionaries to track submissions before triggering FedAvg
-submitted_weights = {}  # client_id -> file_path
-submitted_samples = {}  # client_id -> samples_trained
+# Dictionaries to track submissions
+submitted_weights = {}  
+submitted_samples = {}  
+
+# --- Evaluation Wrapper ---
+def run_evaluation_from_path(model_path: str, round_number: int) -> float:
+    """
+    Wrapper to load the model and data, then call the CS team's evaluate function.
+    Because Machine A runs both the server and Client A, it has access to the client folder [cite: 2, 237-238].
+    """
+    import sys
+    # Ensure Python can find the client folder
+    project_root = os.path.dirname(COORDINATOR_DIR)
+    sys.path.insert(0, project_root)
+    
+    from client.model import TransformerClassifier
+    from client.data import setup_data, get_validation_dataloader
+    
+    # 1. Load the validation dataset
+    _, _, test_texts, test_labels, vocab = setup_data(data_dir=os.path.join(project_root, "data"), save_vocab=False)
+    val_loader = get_validation_dataloader(test_texts, test_labels, vocab)
+    
+    # 2. Initialize an empty model and load the weights from the file
+    model = TransformerClassifier()
+    model.load_state_dict(torch.load(model_path, map_location="cpu", weights_only=True))
+    
+    # 3. Run the CS teammate's core evaluate function
+    print("\n[Coordinator] Running global evaluation...")
+    result = evaluate.evaluate(model, val_loader)
+    
+    # 4. Print the formatted results to the terminal
+    prev_accuracy = credits._get_previous_accuracy(round_number, credits.DB_PATH) if round_number > 1 else 0.0
+    print(evaluate.format_eval_result(result, round_num=round_number, total_rounds=TOTAL_ROUNDS, prev_accuracy=prev_accuracy))
+    
+    return result.accuracy
 
 # --- Core Aggregation Logic ---
 def check_round_completion():
-    """Checks if all clients have submitted. If so, runs FedAvg and logs the round."""
     global current_round, round_status, global_accuracy, round_start_time
     
     if len(submitted_weights) >= len(registered_clients) and len(registered_clients) > 0:
         round_status = 'aggregating'
         print(f"\n--- All clients submitted for round {current_round}. Running FedAvg ---")
         
-        # 1. Load all submitted client weights
         client_weights = {}
         for cid, fpath in submitted_weights.items():
             state_dict, err = fedavg.load_client_weights(fpath, cid)
@@ -41,16 +76,16 @@ def check_round_completion():
                 print(f"[Coordinator] ⚠ Error loading {cid}: {err}")
         
         try:
-            # 2. Run the math engine (Federated Averaging)
+            # 1. Run FedAvg
             result = fedavg.federated_average(client_weights, client_samples=submitted_samples)
             
-            # 3. Save the new, averaged global model to disk
-            fedavg.save_global_model(result.global_state_dict, 'global_model.pt')
+            # 2. Save using the absolute MODEL_PATH
+            fedavg.save_global_model(result.global_state_dict, MODEL_PATH)
             
-            # 4. Evaluate (Mocked for demo until ML team integrates the validation set) [cite: 2, 338-341]
-            global_accuracy += 12.5 
+            # 3. Evaluate the new global model
+            global_accuracy = run_evaluation_from_path(MODEL_PATH, current_round)
             
-            # 5. The Accountant: Log the round to SQLite and print leaderboard
+            # 4. Log the round and print leaderboard
             credits.log_round(current_round, round_start_time, result.clients_included, global_accuracy)
             board = credits.get_leaderboard()
             
@@ -61,15 +96,17 @@ def check_round_completion():
                 
         except fedavg.FedAvgError as e:
             print(f"[Coordinator] ⚠ FedAvg failed: {e}")
+        except Exception as e:
+            print(f"[Coordinator] ⚠ Evaluation failed: {e}")
         
-        # 6. Clean up temporary weight files
-        for fpath in submitted_weights.values():
+        # 5. Clean up temporary weight files (FIXED os.remove)
+        for fpath in list(submitted_weights.values()):
             if os.path.exists(fpath):
                 os.remove(fpath)
         submitted_weights.clear()
         submitted_samples.clear()
 
-        # 7. Step the state machine forward
+        # 6. Step the state machine forward [cite: 1, 121-125]
         if current_round >= TOTAL_ROUNDS:
             round_status = 'done'
             print("\n[Coordinator] Training complete! Final leaderboard ready.")
@@ -83,7 +120,7 @@ def check_round_completion():
 
 @app.route('/register', methods=['POST'])
 def register():
-    """Called once per client at startup [cite: 1, 98-100]."""
+    """Called once per client at startup [cite: 1, 98-99]."""
     data = request.get_json()
     client_id = data.get('client_id')
     
@@ -98,7 +135,7 @@ def register():
 @app.route('/model', methods=['GET'])
 def get_model():
     """Serves the binary .pt global model file [cite: 1, 107-108]."""
-    return send_file('global_model.pt', as_attachment=True)
+    return send_file(MODEL_PATH, as_attachment=True)
 
 @app.route('/submit', methods=['POST'])
 def submit():
@@ -110,17 +147,16 @@ def submit():
     time_seconds = float(request.form['time_seconds'])
     weights_file = request.files['weights']
     
-    # Save the binary weight file temporarily [cite: 1, 117-118]
-    save_path = f"temp_{client_id}_round{current_round}.pt"
+    # Save the binary weight file temporarily in the absolute dir [cite: 1, 117-118]
+    save_path = os.path.join(COORDINATOR_DIR, f"temp_{client_id}_round{current_round}.pt")
     weights_file.save(save_path)
     
     submitted_weights[client_id] = save_path
     submitted_samples[client_id] = samples_trained
     
-    # The Accountant: Log this submission directly to SQLite
+    # Log to SQLite
     points_earned = credits.log_credit(client_id, current_round, samples_trained, time_seconds)
     
-    # Check if this was the last client needed to trigger FedAvg
     check_round_completion()
     
     return jsonify({
@@ -150,10 +186,11 @@ if __name__ == '__main__':
     # Initialize the SQLite database automatically
     credits.init_db()
     
-    # Generate a safe dummy global_model.pt so the first GET /model request doesn't crash
-    if not os.path.exists('global_model.pt'):
-        print("[Coordinator] global_model.pt not found. Generating a safe dummy checkpoint for startup.")
-        torch.save({"dummy": torch.tensor([1.0])}, 'global_model.pt')
+    # Use absolute MODEL_PATH for the startup safety check
+    if not os.path.exists(MODEL_PATH):
+        print(f"[Coordinator] {MODEL_PATH} not found. Generating a safe dummy checkpoint for startup.")
+        # Create a tiny dummy state dict
+        torch.save({"dummy": torch.tensor([1.0])}, MODEL_PATH)
 
     # CRITICAL DEMO-SAVER: host='0.0.0.0' binds to the WiFi adapter.
     print("[Coordinator] Starting Net-Neutral AI Coordinator...")

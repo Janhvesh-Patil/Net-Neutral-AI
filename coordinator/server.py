@@ -27,7 +27,7 @@ def check_round_completion():
     """Checks if all clients have submitted. If so, runs FedAvg and logs the round."""
     global current_round, round_status, global_accuracy, round_start_time
     
-    if len(submitted_weights) >= len(registered_clients) and len(registered_clients) > 0:
+    if len(submitted_weights) >= len(registered_clients) > 0:
         round_status = 'aggregating'
         print(f"\n--- All clients submitted for round {current_round}. Running FedAvg ---")
         

@@ -1,0 +1,37 @@
+# ── Dataset files — download separately from HuggingFace ─────────────────────
+data/*.csv
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+
+# ── Virtual environment ───────────────────────────────────────────────────────
+venv/
+.venv/
+env/
+
+# ── PyCharm ───────────────────────────────────────────────────────────────────
+.idea/
+*.iml
+
+# ── Coordinator runtime files ─────────────────────────────────────────────────
+coordinator/database.db
+coordinator/temp_*.pt
+
+# ── Temp weight files from clients ───────────────────────────────────────────
+client/temp_*.pt
+*.pt.tmp
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Logs and misc ─────────────────────────────────────────────────────────────
+*.log
+*.tmp

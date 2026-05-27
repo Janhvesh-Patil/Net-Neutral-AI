@@ -17,7 +17,7 @@ Database location: coordinator/database.db (auto-created on first run)
 import os
 import sqlite3
 import datetime
-from typing import List, Tuple, Optional, Dict
+from typing import List, Tuple, Dict
 from dataclasses import dataclass
 
 

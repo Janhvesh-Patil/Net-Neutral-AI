@@ -13,7 +13,7 @@ app = Flask(__name__)
 # --- PATH CONFIGURATION ---
 # Ensures the server always looks in the exact folder where server.py lives
 COORDINATOR_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(COORDINATOR_DIR, 'global_model.pt')
+MODEL_PATH = os.path.join(COORDINATOR_DIR, 'checkpoint.pt')
 
 # --- Global State Machine ---
 current_round = 1

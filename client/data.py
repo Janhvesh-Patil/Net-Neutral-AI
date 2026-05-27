@@ -28,7 +28,6 @@ IMPORTANT RUN : python client/data.py data
 import os
 import re
 import json
-import pickle
 from collections import Counter
 from typing import Dict, List, Tuple, Optional
 

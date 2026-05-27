@@ -23,7 +23,7 @@ import time
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict
 
 # ── Local imports ─────────────────────────────────────────────────────────────
 from model import TransformerClassifier

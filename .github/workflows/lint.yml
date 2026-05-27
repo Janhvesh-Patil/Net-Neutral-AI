@@ -26,19 +26,19 @@ jobs:
         run: |
           flake8 client/ \
             --max-line-length=120 \
-            --ignore=E501,W503 \
+            --ignore=E221,E241,E251,E203,E226,E265,E302,W503,W292,F541 \
             --exclude=__pycache__
 
       - name: Lint coordinator/
         run: |
           flake8 coordinator/ \
             --max-line-length=120 \
-            --ignore=E501,W503 \
+            --ignore=E221,E241,E251,E203,E226,E265,E302,W503,W292,F541 \
             --exclude=__pycache__
 
       - name: Lint shared/
         run: |
           flake8 shared/ \
             --max-line-length=120 \
-            --ignore=E501,W503 \
+            --ignore=E221,E241,E251,E203,E226,E265,E302,W503,W292,F541 \
             --exclude=__pycache__

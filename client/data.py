@@ -303,12 +303,31 @@ def get_full_dataloader(
 # ─────────────────────────────────────────────────────────────────────────────
 
 def setup_data(
-    data_dir:     Optional[str] = None,
-    vocab_path:   Optional[str] = None,
-    save_vocab:   bool = True,
+    data_dir:           Optional[str] = None,
+    vocab_path:         Optional[str] = None,
+    save_vocab:         bool = True,
+    local_shard_path:   Optional[str] = None,
 ) -> Tuple[List[str], List[int], List[str], List[int], Vocabulary]:
+    """
+    Load and prepare dataset.
 
-    train_texts, train_labels, test_texts, test_labels = load_imdb_data(data_dir)
+    Args:
+        data_dir: Directory containing imdb_train.csv (if local_shard_path not provided)
+        vocab_path: Path to vocab.json
+        save_vocab: Whether to save vocab after building
+        local_shard_path: Path to client's CSV data shard (NEW). If provided, load from here instead of data_dir
+
+    Returns:
+        Tuple of (train_texts, train_labels, test_texts, test_labels, vocab)
+    """
+    # If local_shard_path provided, load client's data from there
+    if local_shard_path and os.path.exists(local_shard_path):
+        train_texts, train_labels = _load_csv(local_shard_path)
+        # For local shard, we don't have a separate test set (only coordinator has it)
+        test_texts, test_labels = [], []
+    else:
+        # Original behavior: load from data_dir
+        train_texts, train_labels, test_texts, test_labels = load_imdb_data(data_dir)
 
     if vocab_path and os.path.exists(vocab_path):
         vocab = Vocabulary.load(vocab_path)

@@ -22,9 +22,14 @@ env/
 # ── Coordinator runtime files ─────────────────────────────────────────────────
 coordinator/database.db
 coordinator/temp_*.pt
+coordinator/uploaded_dataset.csv
+
+# ── Client runtime files ───────────────────────────────────────────────────────
+client/temp_*.pt
+client/local_data/
+local_data/
 
 # ── Temp weight files from clients ───────────────────────────────────────────
-client/temp_*.pt
 *.pt.tmp
 
 # ── OS ────────────────────────────────────────────────────────────────────────

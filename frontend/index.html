@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Net-Neutral AI - Federated Learning Control Panel</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Net-Neutral AI | Federated Learning Control Panel</h1>
+
+        <!-- Step 1: Upload Dataset -->
+        <div class="card">
+            <h2>Step 1: Upload Dataset</h2>
+            <div class="form-group">
+                <input type="file" id="datasetInput" accept=".csv" />
+                <button onclick="uploadDataset()">Upload CSV</button>
+            </div>
+            <div id="uploadStatus"></div>
+        </div>
+
+        <!-- Step 2: Configure Coordinator IP -->
+        <div class="card">
+            <h2>Step 2: Coordinator IP</h2>
+            <div class="form-group">
+                <input type="text" id="coordinatorIP" placeholder="192.168.1.100" value="localhost" />
+                <input type="number" id="coordinatorPort" placeholder="5000" value="5000" />
+                <button onclick="setCoordinator()">Set Coordinator</button>
+            </div>
+            <div id="ipStatus"></div>
+        </div>
+
+        <!-- Step 3: Monitor Clients -->
+        <div class="card">
+            <h2>Step 3: Connected Clients</h2>
+            <button onclick="refreshClients()">Refresh Clients</button>
+            <table id="clientsTable">
+                <thead>
+                    <tr>
+                        <th>Client ID</th>
+                        <th>IP Address</th>
+                        <th>Status</th>
+                        <th>Data Received</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+            <div id="clientCount">Connected: 0 clients</div>
+        </div>
+
+        <!-- Step 4: Start Training -->
+        <div class="card">
+            <h2>Step 4: Start Training</h2>
+            <div class="form-group">
+                <input type="number" id="numClients" placeholder="Number of clients" value="3" min="1" />
+                <button onclick="startTraining()">Start Training</button>
+            </div>
+            <div id="trainingStatus"></div>
+        </div>
+
+        <!-- Live Status -->
+        <div class="card status-panel">
+            <h2>Training Status Log</h2>
+            <div id="trainingLog"></div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

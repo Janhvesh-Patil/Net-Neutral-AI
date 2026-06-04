@@ -10,6 +10,7 @@ import torch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from shared import config
+from shared import ip_utils
 from model import TransformerClassifier
 from train import train_one_round, save_weights, load_weights
 from data import setup_data, get_client_dataloader
@@ -40,22 +41,32 @@ def print_status(message: str, prefix: str = "[Client]") -> None:
 def register_with_coordinator(client_id: str) -> int:
 
     url = f"{config.BASE_URL}/register"
-    payload = {"client_id": client_id}
-    
+
+    # Get client IP address (NEW)
+    try:
+        client_ip = ip_utils.get_local_ip()
+    except Exception:
+        client_ip = "unknown"
+
+    payload = {
+        "client_id": client_id,
+        "ip_address": client_ip
+    }
+
     for attempt in range(1, config.REGISTER_RETRY_ATTEMPTS + 1):
         try:
-            print_status(f"Registering with coordinator (attempt {attempt}/{config.REGISTER_RETRY_ATTEMPTS})...")
+            print_status(f"Registering with coordinator from {client_ip} (attempt {attempt}/{config.REGISTER_RETRY_ATTEMPTS})...")
             response = requests.post(url, json=payload, timeout=10)
             response.raise_for_status()
-            
+
             data = response.json()
             current_round = data.get('round', 1)
-            
-            print_status(f"✓ Registered successfully. Current round: {current_round}")
+
+            print_status(f"[OK] Registered successfully. Current round: {current_round}")
             return current_round
-            
+
         except requests.exceptions.RequestException as e:
-            print_status(f"✗ Registration failed: {e}")
+            print_status(f"[ERROR] Registration failed: {e}")
             if attempt < config.REGISTER_RETRY_ATTEMPTS:
                 print_status(f"Retrying in {config.REGISTER_RETRY_DELAY} seconds...")
                 time.sleep(config.REGISTER_RETRY_DELAY)
@@ -70,17 +81,17 @@ def register_with_coordinator(client_id: str) -> int:
 def download_global_model(save_path: str) -> None:
 
     url = f"{config.BASE_URL}/model"
-    
+
     try:
         print_status("Downloading global model...")
         response = requests.get(url, timeout=30)
         response.raise_for_status()
-        
+
         with open(save_path, 'wb') as f:
             f.write(response.content)
-        
-        print_status(f"✓ Model downloaded to {save_path}")
-        
+
+        print_status(f"[OK] Model downloaded to {save_path}")
+
     except requests.exceptions.RequestException as e:
         raise RuntimeError(f"Failed to download global model: {e}")
 
@@ -93,10 +104,10 @@ def submit_weights(
 ) -> dict:
 
     url = f"{config.BASE_URL}/submit"
-    
+
     try:
         print_status("Submitting weights to coordinator...")
-        
+
         with open(weights_path, 'rb') as f:
             files = {'weights': f}
             data = {
@@ -104,15 +115,15 @@ def submit_weights(
                 'samples_trained': samples_trained,
                 'time_seconds': time_seconds,
             }
-            
+
             response = requests.post(url, files=files, data=data, timeout=60)
             response.raise_for_status()
-        
+
         result = response.json()
-        print_status(f"✓ Submission successful. Credits earned: {result.get('credits', 0)}")
-        
+        print_status(f"[OK] Submission successful. Credits earned: {result.get('credits', 0)}")
+
         return result
-        
+
     except requests.exceptions.RequestException as e:
         raise RuntimeError(f"Failed to submit weights: {e}")
 
@@ -121,33 +132,64 @@ def poll_for_next_round(current_round: int) -> dict:
 
     url = f"{config.BASE_URL}/status"
     wait_start = time.time()
-    
+
     print_status(f"Waiting for round {current_round + 1}...")
-    
+
     while True:
         try:
             response = requests.get(url, timeout=5)
             response.raise_for_status()
             status = response.json()
-            
+
             elapsed = int(time.time() - wait_start)
 
             if status.get('round_status') == 'done':
-                print_status("✓ All rounds complete!")
+                print_status("[OK] All rounds complete!")
                 return status
 
             if status.get('round') > current_round:
-                print_status(f"✓ Round {status.get('round')} started!")
+                print_status(f"[OK] Round {status.get('round')} started!")
                 return status
 
             if elapsed % 10 == 0:
                 print_status(f"Waiting for round {current_round + 1}... ({elapsed}s elapsed)")
-            
+
             time.sleep(config.POLL_INTERVAL_SECS)
-            
+
         except requests.exceptions.RequestException as e:
-            print_status(f"⚠ Status poll failed: {e}. Retrying...")
+            print_status(f"[WARNING] Status poll failed: {e}. Retrying...")
             time.sleep(config.POLL_INTERVAL_SECS)
+
+
+def download_data_shard(client_id: str, save_path: str, max_retries: int = 3) -> None:
+    """
+    Download client's data shard from coordinator.
+    Only used in first round; subsequent rounds use cached data.
+    """
+    url = f"{config.BASE_URL}/get_data_shard"
+    payload = {"client_id": client_id}
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            print_status(f"Downloading data shard (attempt {attempt}/{max_retries})...")
+            response = requests.post(url, json=payload, timeout=120)
+            response.raise_for_status()
+
+            # Create directory if needed
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
+            with open(save_path, 'wb') as f:
+                f.write(response.content)
+
+            print_status(f"[OK] Data shard saved: {save_path}")
+            return
+
+        except Exception as e:
+            if attempt < max_retries:
+                print_status(f"[WARNING] Download failed (attempt {attempt}/{max_retries}): {e}")
+                time.sleep(5)
+            else:
+                raise RuntimeError(f"Failed to download data shard after {max_retries} attempts: {e}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -157,18 +199,32 @@ def poll_for_next_round(current_round: int) -> dict:
 def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
 
     print_banner(client_id)
-    
+
     # ── Step 1: Register with coordinator ─────────────────────────────────────
     current_round = register_with_coordinator(client_id)
-    
-    # ── Step 2: Load local data shard ─────────────────────────────────────────
-    print_status("Loading local data shard...")
+
+    # ── Step 2: Download data shard if not cached (NEW) ─────────────────────────
+    data_shard_path = os.path.join(config.LOCAL_DATA_DIR, config.DATA_SHARD_FILENAME.format(client_id=client_id))
+
+    if not os.path.exists(data_shard_path):
+        print_status(f"Data shard not found locally. Downloading from coordinator...")
+        try:
+            download_data_shard(client_id, data_shard_path)
+        except Exception as e:
+            print_status(f"[ERROR] {e}")
+            raise
+    else:
+        print_status(f"[OK] Using cached data shard: {data_shard_path}")
+
+    # ── Step 3: Load local data shard ─────────────────────────────────────────
+    print_status("Loading data shard...")
     train_texts, train_labels, _, _, vocab = setup_data(
         data_dir=data_dir,
         vocab_path=vocab_path,
         save_vocab=False,
+        local_shard_path=data_shard_path
     )
-    
+
     dataloader = get_client_dataloader(
         client_id=client_id,
         train_texts=train_texts,
@@ -177,10 +233,10 @@ def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
         batch_size=config.BATCH_SIZE,
         shuffle=True,
     )
-    
-    print_status(f"✓ Data loaded. Shard size: {len(dataloader.dataset):,} samples")
-    
-    # ── Step 3: Training loop ─────────────────────────────────────────────────
+
+    print_status(f"[OK] Data loaded. Shard size: {len(dataloader.dataset):,} samples")
+
+    # ── Step 4: Training loop ────────────────────────────────────────────────────
     for round_num in range(current_round, config.TOTAL_ROUNDS + 1):
         print(f"\n{'='*60}")
         print(f"  ROUND {round_num} / {config.TOTAL_ROUNDS}")
@@ -196,7 +252,7 @@ def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
 
             model = TransformerClassifier()
             model = load_weights(model_path, model)
-            print_status("✓ Global model loaded")
+            print_status("[OK] Global model loaded")
 
             state_dict, samples_trained, time_seconds, final_loss = train_one_round(
                 model=model,
@@ -211,9 +267,9 @@ def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
             weights_temp = tempfile.NamedTemporaryFile(suffix='.pt', delete=False)
             weights_path = weights_temp.name
             weights_temp.close()
-            
+
             save_weights(state_dict, weights_path)
-            print_status(f"✓ Weights saved to {weights_path}")
+            print_status(f"[OK] Weights saved to {weights_path}")
 
             result = submit_weights(
                 client_id=client_id,
@@ -237,17 +293,17 @@ def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
                 os.unlink(weights_path)
 
             if round_num >= config.TOTAL_ROUNDS:
-                print_status("✓ All rounds complete!")
+                print_status("[OK] All rounds complete!")
                 break
 
             status = poll_for_next_round(round_num)
-            
+
             if status.get('round_status') == 'done':
-                print_status("✓ Training session complete!")
+                print_status("[OK] Training session complete!")
                 break
-                
+
         except Exception as e:
-            print_status(f"✗ Error in round {round_num}: {e}")
+            print_status(f"[ERROR] Error in round {round_num}: {e}")
             if os.path.exists(model_path):
                 os.unlink(model_path)
             if 'weights_path' in locals() and os.path.exists(weights_path):

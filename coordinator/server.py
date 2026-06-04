@@ -7,8 +7,9 @@ from flask import Flask, request, jsonify, send_file
 import fedavg
 import credits
 import evaluate
+import data_distributor
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='../frontend', static_url_path='/')
 
 # --- PATH CONFIGURATION ---
 # Ensures the server always looks in the exact folder where server.py lives
@@ -19,13 +20,18 @@ MODEL_PATH = os.path.join(COORDINATOR_DIR, 'checkpoint.pt')
 current_round = 1
 TOTAL_ROUNDS = 5
 registered_clients = set()
-round_status = 'active'
+round_status = 'waiting_for_clients'
 global_accuracy = 0.0
 round_start_time = datetime.datetime.now()
 
 # Dictionaries to track submissions
-submitted_weights = {}  
-submitted_samples = {}  
+submitted_weights = {}
+submitted_samples = {}
+
+# Data distribution (NEW)
+client_registry = {}  # {client_id: {'ip': '192.168.1.100', 'data_received': False}}
+data_shards = {}      # {client_id: DataFrame} - in-memory cache of divided data
+uploaded_dataset_path = os.path.join(COORDINATOR_DIR, 'uploaded_dataset.csv')
 
 # --- Evaluation Wrapper ---
 def run_evaluation_from_path(model_path: str, round_number: int) -> float:
@@ -57,11 +63,15 @@ def run_evaluation_from_path(model_path: str, round_number: int) -> float:
 # --- Core Aggregation Logic ---
 def check_round_completion():
     global current_round, round_status, global_accuracy, round_start_time
-    
+
+    # Don't check for completion if waiting for clients or distributing data
+    if round_status in ['waiting_for_clients', 'data_distributing']:
+        return
+
     if len(submitted_weights) >= len(registered_clients) > 0:
         round_status = 'aggregating'
         print(f"\n--- All clients submitted for round {current_round}. Running FedAvg ---")
-        
+
         client_weights = {}
         for cid, fpath in submitted_weights.items():
             state_dict, err = fedavg.load_client_weights(fpath, cid)
@@ -69,31 +79,31 @@ def check_round_completion():
                 client_weights[cid] = state_dict
             else:
                 print(f"[Coordinator] ⚠ Error loading {cid}: {err}")
-        
+
         try:
             # 1. Run FedAvg
             result = fedavg.federated_average(client_weights, client_samples=submitted_samples)
-            
+
             # 2. Save using the absolute MODEL_PATH
             fedavg.save_global_model(result.global_state_dict, MODEL_PATH)
-            
+
             # 3. Evaluate the new global model
             global_accuracy = run_evaluation_from_path(MODEL_PATH, current_round)
-            
+
             # 4. Log the round and print leaderboard
             credits.log_round(current_round, round_start_time, result.clients_included, global_accuracy)
             board = credits.get_leaderboard()
-            
+
             if current_round >= TOTAL_ROUNDS:
                 print(credits.format_final_leaderboard(board))
             else:
                 print(credits.format_leaderboard(board, current_round))
-                
+
         except fedavg.FedAvgError as e:
             print(f"[Coordinator] ⚠ FedAvg failed: {e}")
         except Exception as e:
             print(f"[Coordinator] ⚠ Evaluation failed: {e}")
-        
+
         # 5. Clean up temporary weight files (FIXED os.remove)
         for fpath in list(submitted_weights.values()):
             if os.path.exists(fpath):
@@ -107,24 +117,31 @@ def check_round_completion():
             print("\n[Coordinator] Training complete! Final leaderboard ready.")
         else:
             current_round += 1
-            round_status = 'active'
+            round_status = 'waiting_for_clients'
             round_start_time = datetime.datetime.now()
-            print(f"\n[Coordinator] Starting Round {current_round}")
+            print(f"\n[Coordinator] Ready for Round {current_round}")
 
 # --- API Endpoints ---
 
 @app.route('/register', methods=['POST'])
 def register():
-    """Called once per client at startup [cite: 1, 98-99]."""
+    """Called once per client at startup. Now captures IP address."""
     data = request.get_json()
     client_id = data.get('client_id')
-    
+    client_ip = data.get('ip_address', 'unknown')
+
     if not client_id:
         return jsonify({'error': 'client_id missing'}), 400
-        
+
     registered_clients.add(client_id)
-    print(f"[Coordinator] Node Registered: {client_id}")
-    
+    client_registry[client_id] = {
+        'ip': client_ip,
+        'data_received': False,
+        'registered_at': datetime.datetime.now().isoformat()
+    }
+
+    print(f"[Coordinator] Node Registered: {client_id} from {client_ip}")
+
     return jsonify({'status': 'ok', 'round': current_round})
 
 @app.route('/model', methods=['GET'])
@@ -176,6 +193,143 @@ def results():
         'final_accuracy': global_accuracy,
         'total_rounds_completed': current_round if round_status == 'done' else current_round - 1
     })
+
+
+# --- NEW ENDPOINTS FOR DATA DISTRIBUTION ---
+
+@app.route('/upload_dataset', methods=['POST'])
+def upload_dataset():
+    """Accept CSV dataset upload from frontend."""
+    global round_status
+
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+
+    file = request.files['file']
+    if not file.filename.endswith('.csv'):
+        return jsonify({'error': 'File must be CSV format'}), 400
+
+    try:
+        # Save uploaded file
+        file.save(uploaded_dataset_path)
+        print(f"[Coordinator] Dataset uploaded: {uploaded_dataset_path}")
+
+        # Validate the dataset
+        df = data_distributor.load_and_validate_csv(uploaded_dataset_path)
+        num_rows = len(df)
+
+        print(f"[Coordinator] Dataset validated: {num_rows} samples")
+        return jsonify({'status': 'ok', 'rows': num_rows})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
+@app.route('/get_clients', methods=['GET'])
+def get_clients():
+    """Return list of registered clients with their IPs."""
+    clients_list = [
+        {
+            'id': client_id,
+            'ip': client_registry.get(client_id, {}).get('ip', 'unknown'),
+            'data_received': client_registry.get(client_id, {}).get('data_received', False)
+        }
+        for client_id in sorted(registered_clients)
+    ]
+    return jsonify({'clients': clients_list, 'count': len(clients_list)})
+
+
+@app.route('/start_training', methods=['POST'])
+def start_training():
+    """Frontend signals to begin data distribution."""
+    global round_status, data_shards
+
+    data = request.get_json()
+    num_clients = data.get('client_count')
+
+    if not num_clients or num_clients < 1:
+        return jsonify({'error': 'Invalid client_count'}), 400
+
+    if not os.path.exists(uploaded_dataset_path):
+        return jsonify({'error': 'No dataset uploaded yet'}), 400
+
+    if len(registered_clients) < num_clients:
+        return jsonify({
+            'error': f'Only {len(registered_clients)} clients registered, but {num_clients} expected'
+        }), 400
+
+    try:
+        # Divide dataset among registered clients
+        print(f"\n[Coordinator] Dividing dataset for {num_clients} clients...")
+        data_shards = data_distributor.divide_dataset(uploaded_dataset_path, num_clients)
+
+        # Validate shards
+        total_samples = sum(len(shard) for shard in data_shards.values())
+        data_distributor.validate_shards(data_shards, total_samples)
+
+        print(f"[Coordinator] Dataset divided successfully")
+        for client_id, shard in data_shards.items():
+            print(f"  {client_id}: {len(shard)} samples")
+
+        round_status = 'data_distributing'
+        return jsonify({'status': 'ok', 'shards_prepared': len(data_shards)})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
+@app.route('/get_data_shard', methods=['POST'])
+def get_data_shard():
+    """Send client's data shard as CSV file."""
+    global round_status
+
+    data = request.get_json()
+    client_id = data.get('client_id')
+
+    if not client_id:
+        return jsonify({'error': 'client_id missing'}), 400
+
+    # Only distribute data in first round (data_distributing state)
+    if round_status != 'data_distributing':
+        return jsonify({'error': 'Data distribution not active'}), 400
+
+    if client_id not in data_shards:
+        return jsonify({'error': f'No shard for {client_id}'}), 400
+
+    try:
+        # Convert DataFrame to CSV in memory
+        shard_df = data_shards[client_id]
+        csv_data = shard_df.to_csv(index=False).encode('utf-8')
+
+        # Mark as received
+        if client_id in client_registry:
+            client_registry[client_id]['data_received'] = True
+
+        print(f"[Coordinator] Data shard sent to {client_id}")
+
+        # Check if all clients have received data
+        all_received = all(
+            client_registry.get(cid, {}).get('data_received', False)
+            for cid in data_shards.keys()
+        )
+
+        if all_received and round_status == 'data_distributing':
+            round_status = 'active'
+            print(f"[Coordinator] All clients received data. Starting training...")
+
+        return csv_data, 200, {'Content-Disposition': 'attachment; filename="data_shard.csv"'}
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
+@app.route('/')
+def serve_frontend():
+    """Serve frontend HTML."""
+    frontend_path = os.path.join(os.path.dirname(COORDINATOR_DIR), 'frontend', 'index.html')
+    if os.path.exists(frontend_path):
+        return send_file(frontend_path)
+    return jsonify({'error': 'Frontend not found'}), 404
 
 if __name__ == '__main__':
     # Initialize the SQLite database automatically

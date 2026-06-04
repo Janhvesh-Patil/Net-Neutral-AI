@@ -1,22 +1,5 @@
 """
-train.py — Net-Neutral AI
-Local training loop for each federated client.
-
-Spec reference: TRD Section 6.2, App Flow Section 5.3
-
-Responsibilities:
-    - Load global model weights received from coordinator
-    - Train on local data shard for LOCAL_EPOCHS epochs
-    - Return updated state_dict + metadata (samples, time, loss)
-    - Print formatted terminal output after each epoch and on completion
-
-Returns to client.py:
-    state_dict      : updated model weights (sent to coordinator via /submit)
-    samples_trained : total samples processed (used for credit calculation)
-    time_seconds    : wall-clock training time
-    final_loss      : average loss of the last epoch
-
-    IMPORTANT RUN : python client/train.py data
+IMPORTANT RUN : python client/train.py data
 """
 
 import time
@@ -32,7 +15,7 @@ from model import TransformerClassifier
 # ── Constants ────────────────────────────────────────────────────────────────
 LOCAL_EPOCHS  = 2
 LEARNING_RATE = 1e-3
-PRINT_WIDTH   = 60     # terminal output width
+PRINT_WIDTH   = 60
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -78,10 +61,10 @@ def train_one_round(
 
     Args:
         model        : TransformerClassifier loaded with global weights
-        dataloader   : client's local DataLoader (5,000 samples)
+        dataloader   : client's local DataLoader
         client_id    : e.g. 'client_A' — used in terminal output
         round_num    : current round number (1-indexed)
-        total_rounds : total rounds in session (e.g. 5)
+        total_rounds : total rounds in session
         epochs       : number of local epochs per round
         lr           : learning rate for Adam optimiser
 
@@ -103,7 +86,7 @@ def train_one_round(
     if device.type == "cpu":
         print()
         print("  ⚠  Running on CPU — training will take 8–12 minutes.")
-        print("     Shift to Colab/GPU for faster iteration.")
+        print("     Shift to GPU for faster iteration.")
 
     _row("Epochs this round", str(epochs))
     _row("Samples in shard",  f"{len(dataloader.dataset):,}")
@@ -135,16 +118,15 @@ def train_one_round(
 
             # Forward pass
             optimiser.zero_grad()
-            logits = model(batch_ids)               # (batch, 2)
+            logits = model(batch_ids)
             loss   = criterion(logits, batch_labels)
 
             # Backward pass
             loss.backward()
-            # Gradient clipping — prevents exploding gradients on tricky batches
+            # Gradient clipping
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimiser.step()
 
-            # Accumulate metrics
             epoch_loss  += loss.item()
             preds        = logits.argmax(dim=1)
             correct     += (preds == batch_labels).sum().item()
@@ -178,9 +160,6 @@ def train_one_round(
     _blank()
 
     # ── Return updated weights ────────────────────────────────────────────────
-    # Move model back to CPU before extracting state_dict.
-    # Reason: coordinator runs on CPU (IT's machine).
-    # Sending GPU tensors causes silent errors on the receiving end.
     model.cpu()
     state_dict = {k: v.clone() for k, v in model.state_dict().items()}
 
@@ -246,7 +225,7 @@ if __name__ == "__main__":
     train_texts, train_labels, _, _, vocab = setup_data(
         data_dir   = data_dir,
         vocab_path = vocab_path,
-        save_vocab = False,   # vocab already built by data.py
+        save_vocab = False,
     )
 
     dataloader = get_client_dataloader(
@@ -267,7 +246,7 @@ if __name__ == "__main__":
         client_id    = "client_A",
         round_num    = 1,
         total_rounds = 5,
-        epochs       = 1,       # 1 epoch only for sanity check
+        epochs       = 1,
         lr           = LEARNING_RATE,
     )
 
@@ -287,10 +266,9 @@ if __name__ == "__main__":
 
     # ── Test weight serialisation ─────────────────────────────────────────────
     import tempfile
-    # Use delete=False and close before loading — required on Windows
     tmp = tempfile.NamedTemporaryFile(suffix=".pt", delete=False)
     tmp_path = tmp.name
-    tmp.close()                          # close handle before writing
+    tmp.close()
     try:
         save_weights(state_dict, tmp_path)
         model2 = TransformerClassifier()
@@ -299,7 +277,7 @@ if __name__ == "__main__":
         for k in state_dict:
             assert torch.allclose(state_dict[k], state2[k]), f"Weight mismatch after save/load: {k}"
     finally:
-        os.unlink(tmp_path)              # guaranteed cleanup even if assertion fails
+        os.unlink(tmp_path)
 
     print()
     print("=" * PRINT_WIDTH)

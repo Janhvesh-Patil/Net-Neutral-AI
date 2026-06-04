@@ -1,23 +1,3 @@
-"""
-client.py — Net-Neutral AI
-Federated learning client — orchestrates registration, training, and submission.
-
-Spec reference: TRD Section 5, App Flow Section 4 & 5
-
-Responsibilities:
-    1. Register with coordinator at startup
-    2. Download global model weights
-    3. Load local data shard
-    4. Train locally for LOCAL_EPOCHS epochs
-    5. Submit updated weights + metadata to coordinator
-    6. Repeat for TOTAL_ROUNDS rounds
-
-Usage:
-    python client.py --client_id client_A
-    python client.py --client_id client_B
-    python client.py --client_id client_C
-"""
-
 import os
 import sys
 import time
@@ -40,7 +20,6 @@ from data import setup_data, get_client_dataloader
 # ─────────────────────────────────────────────────────────────────────────────
 
 def print_banner(client_id: str) -> None:
-    """Print startup banner."""
     print("\n" + "=" * 60)
     print(f"  Net-Neutral AI | {client_id.upper()}")
     print("=" * 60)
@@ -51,7 +30,6 @@ def print_banner(client_id: str) -> None:
 
 
 def print_status(message: str, prefix: str = "[Client]") -> None:
-    """Print status message."""
     print(f"{prefix} {message}")
 
 
@@ -60,18 +38,7 @@ def print_status(message: str, prefix: str = "[Client]") -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def register_with_coordinator(client_id: str) -> int:
-    """
-    Register this client with the coordinator.
-    
-    Args:
-        client_id: unique client identifier (e.g. 'client_A')
-    
-    Returns:
-        current_round: the round number returned by coordinator
-    
-    Raises:
-        RuntimeError: if registration fails after all retry attempts
-    """
+
     url = f"{config.BASE_URL}/register"
     payload = {"client_id": client_id}
     
@@ -101,15 +68,7 @@ def register_with_coordinator(client_id: str) -> int:
 
 
 def download_global_model(save_path: str) -> None:
-    """
-    Download the current global model from coordinator.
-    
-    Args:
-        save_path: local path to save the downloaded model file
-    
-    Raises:
-        RuntimeError: if download fails
-    """
+
     url = f"{config.BASE_URL}/model"
     
     try:
@@ -132,21 +91,7 @@ def submit_weights(
     samples_trained: int,
     time_seconds: float,
 ) -> dict:
-    """
-    Submit local weights and metadata to coordinator.
-    
-    Args:
-        client_id: unique client identifier
-        weights_path: path to saved weights file
-        samples_trained: number of samples processed this round
-        time_seconds: wall-clock training time
-    
-    Returns:
-        response dict with keys: credits, round, global_acc
-    
-    Raises:
-        RuntimeError: if submission fails
-    """
+
     url = f"{config.BASE_URL}/submit"
     
     try:
@@ -173,15 +118,7 @@ def submit_weights(
 
 
 def poll_for_next_round(current_round: int) -> dict:
-    """
-    Poll /status endpoint until next round starts or training completes.
-    
-    Args:
-        current_round: the round we just completed
-    
-    Returns:
-        status dict with keys: round, round_status, active_clients
-    """
+
     url = f"{config.BASE_URL}/status"
     wait_start = time.time()
     
@@ -194,19 +131,16 @@ def poll_for_next_round(current_round: int) -> dict:
             status = response.json()
             
             elapsed = int(time.time() - wait_start)
-            
-            # Check if training is done
+
             if status.get('round_status') == 'done':
                 print_status("✓ All rounds complete!")
                 return status
-            
-            # Check if new round started
+
             if status.get('round') > current_round:
                 print_status(f"✓ Round {status.get('round')} started!")
                 return status
-            
-            # Still waiting
-            if elapsed % 10 == 0:  # Print every 10 seconds
+
+            if elapsed % 10 == 0:
                 print_status(f"Waiting for round {current_round + 1}... ({elapsed}s elapsed)")
             
             time.sleep(config.POLL_INTERVAL_SECS)
@@ -221,14 +155,7 @@ def poll_for_next_round(current_round: int) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
-    """
-    Main client execution loop.
-    
-    Args:
-        client_id: unique client identifier (e.g. 'client_A')
-        data_dir: path to data directory
-        vocab_path: path to vocabulary JSON file
-    """
+
     print_banner(client_id)
     
     # ── Step 1: Register with coordinator ─────────────────────────────────────
@@ -239,7 +166,7 @@ def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
     train_texts, train_labels, _, _, vocab = setup_data(
         data_dir=data_dir,
         vocab_path=vocab_path,
-        save_vocab=False,  # vocab should already exist
+        save_vocab=False,
     )
     
     dataloader = get_client_dataloader(
@@ -266,13 +193,11 @@ def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
         
         try:
             download_global_model(model_path)
-            
-            # Load model with global weights
+
             model = TransformerClassifier()
             model = load_weights(model_path, model)
             print_status("✓ Global model loaded")
-            
-            # Train locally
+
             state_dict, samples_trained, time_seconds, final_loss = train_one_round(
                 model=model,
                 dataloader=dataloader,
@@ -282,24 +207,21 @@ def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
                 epochs=config.LOCAL_EPOCHS,
                 lr=config.LEARNING_RATE,
             )
-            
-            # Save updated weights
+
             weights_temp = tempfile.NamedTemporaryFile(suffix='.pt', delete=False)
             weights_path = weights_temp.name
             weights_temp.close()
             
             save_weights(state_dict, weights_path)
             print_status(f"✓ Weights saved to {weights_path}")
-            
-            # Submit to coordinator
+
             result = submit_weights(
                 client_id=client_id,
                 weights_path=weights_path,
                 samples_trained=samples_trained,
                 time_seconds=time_seconds,
             )
-            
-            # Print round summary
+
             print(f"\n{'─'*60}")
             print(f"  Round {round_num} Summary")
             print(f"{'─'*60}")
@@ -308,19 +230,16 @@ def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
             print(f"  Samples trained   : {samples_trained:,}")
             print(f"  Training time     : {time_seconds:.1f}s")
             print(f"{'─'*60}\n")
-            
-            # Clean up temp files
+
             if os.path.exists(model_path):
                 os.unlink(model_path)
             if os.path.exists(weights_path):
                 os.unlink(weights_path)
-            
-            # Check if this was the last round
+
             if round_num >= config.TOTAL_ROUNDS:
                 print_status("✓ All rounds complete!")
                 break
-            
-            # Poll for next round
+
             status = poll_for_next_round(round_num)
             
             if status.get('round_status') == 'done':
@@ -329,7 +248,6 @@ def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
                 
         except Exception as e:
             print_status(f"✗ Error in round {round_num}: {e}")
-            # Clean up temp files on error
             if os.path.exists(model_path):
                 os.unlink(model_path)
             if 'weights_path' in locals() and os.path.exists(weights_path):
@@ -349,7 +267,6 @@ def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main():
-    """Parse arguments and run client."""
     parser = argparse.ArgumentParser(description='Net-Neutral AI Federated Client')
     parser.add_argument(
         '--client_id',
@@ -371,20 +288,18 @@ def main():
     )
     
     args = parser.parse_args()
-    
-    # Resolve data paths
+
     client_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(client_dir)
     
     data_dir = args.data_dir or os.path.join(project_root, 'data')
     vocab_path = args.vocab_path or os.path.join(data_dir, 'vocab.json')
-    
-    # Validate client_id
+
     valid_clients = ['client_A', 'client_B', 'client_C']
     if args.client_id not in valid_clients:
         print(f"Warning: client_id '{args.client_id}' not in standard list {valid_clients}")
         print("Proceeding anyway...")
-    
+
     # Run client
     try:
         run_client(args.client_id, data_dir, vocab_path)

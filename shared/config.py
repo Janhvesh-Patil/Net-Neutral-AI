@@ -1,14 +1,11 @@
 """
-config.py — Net-Neutral AI
-Shared configuration — edit this file before every demo session.
-
-CRITICAL: Set COORDINATOR_IP to IT's machine IPv4 address.
-Run ipconfig on IT's machine and look for IPv4 Address under WiFi adapter.
+CRITICAL: Set COORDINATOR_IP
+Run ipconfig on coordinator machine and look for IPv4 Address under WiFi adapter.
 Example: 192.168.1.42
 """
 
 # ── Network ───────────────────────────────────────────────────────────────────
-COORDINATOR_IP = 'IP_ADDRESS_OF_COORDINATOR'   # ← REPLACE with IT machine's local IP
+COORDINATOR_IP = 'IP_ADDRESS_OF_COORDINATOR'
 COORDINATOR_PORT = 5000
 BASE_URL         = f"http://{COORDINATOR_IP}:{COORDINATOR_PORT}"
 
@@ -23,11 +20,7 @@ DATA_PATH  = "../data"          # relative to client/ folder
 VOCAB_PATH = "../data/vocab.json"
 
 # ── Client identity ───────────────────────────────────────────────────────────
-# Each machine hardcodes its own client ID — do not change after setup
-# Machine B (Janhvesh)  : CLIENT_ID = "client_A"
-# Machine C (ENTC2)     : CLIENT_ID = "client_B"
-# Machine D (ENTC1)     : CLIENT_ID = "client_C"
-CLIENT_ID = "client_A"          # ← each machine sets its own value
+CLIENT_ID = "client_A"
 
 # ── Coordinator paths ─────────────────────────────────────────────────────────
 CHECKPOINT_FILENAME = "checkpoint.pt"

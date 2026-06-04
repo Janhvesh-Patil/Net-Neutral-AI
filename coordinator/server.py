@@ -3,7 +3,7 @@ import datetime
 import torch
 from flask import Flask, request, jsonify, send_file
 
-# Import internal modules [cite: 2, 266-267]
+# Import internal modules
 import fedavg
 import credits
 import evaluate
@@ -17,7 +17,7 @@ MODEL_PATH = os.path.join(COORDINATOR_DIR, 'checkpoint.pt')
 
 # --- Global State Machine ---
 current_round = 1
-TOTAL_ROUNDS = 5  # Configured per TRD spec [cite: 2, 303-305]
+TOTAL_ROUNDS = 5
 registered_clients = set()
 round_status = 'active'
 global_accuracy = 0.0
@@ -29,10 +29,6 @@ submitted_samples = {}
 
 # --- Evaluation Wrapper ---
 def run_evaluation_from_path(model_path: str, round_number: int) -> float:
-    """
-    Wrapper to load the model and data, then call the CS team's evaluate function.
-    Because Machine A runs both the server and Client A, it has access to the client folder [cite: 2, 237-238].
-    """
     import sys
     # Ensure Python can find the client folder
     project_root = os.path.dirname(COORDINATOR_DIR)
@@ -48,8 +44,7 @@ def run_evaluation_from_path(model_path: str, round_number: int) -> float:
     # 2. Initialize an empty model and load the weights from the file
     model = TransformerClassifier()
     model.load_state_dict(torch.load(model_path, map_location="cpu", weights_only=True))
-    
-    # 3. Run the CS teammate's core evaluate function
+
     print("\n[Coordinator] Running global evaluation...")
     result = evaluate.evaluate(model, val_loader)
     
@@ -106,7 +101,7 @@ def check_round_completion():
         submitted_weights.clear()
         submitted_samples.clear()
 
-        # 6. Step the state machine forward [cite: 1, 121-125]
+        # 6. Step the state machine forward
         if current_round >= TOTAL_ROUNDS:
             round_status = 'done'
             print("\n[Coordinator] Training complete! Final leaderboard ready.")

@@ -1,17 +1,5 @@
 """
-evaluate.py — Net-Neutral AI
-Model evaluation — accuracy, precision, recall, F1.
-
-Design: pure functions, no printing, no hardcoded paths.
-Callers (server.py, pretrain.py) handle all output formatting.
-
-Spec reference: TRD Section 6.2
-    - Evaluation metric : Accuracy (%) — primary
-    - Additional metrics: Precision, Recall, F1 (per class + macro)
-    - Validation set    : 2,000 samples held on coordinator
-    - Called after      : every FedAvg round + pretrain baseline verification
-
-    IMPORTANT RUN : python client/evaluate.py data
+IMPORTANT RUN : python client/evaluate.py data
 """
 
 import torch
@@ -25,17 +13,12 @@ from dataclasses import dataclass, field
 
 @dataclass
 class EvalResult:
-    """
-    Holds all evaluation metrics for one evaluation run.
-    Passed back to the caller — server.py or pretrain.py formats the output.
-    """
-    # Primary metric — what judges see
-    accuracy: float                          # 0.0 to 1.0
+    accuracy: float
 
     # Per-class metrics
-    precision: Dict[int, float]              # {0: float, 1: float}
-    recall:    Dict[int, float]              # {0: float, 1: float}
-    f1:        Dict[int, float]              # {0: float, 1: float}
+    precision: Dict[int, float]
+    recall:    Dict[int, float]
+    f1:        Dict[int, float]
 
     # Macro averages (mean across both classes)
     macro_precision: float
@@ -43,7 +26,7 @@ class EvalResult:
     macro_f1:        float
 
     # Support (number of samples per class in eval set)
-    support: Dict[int, int]                  # {0: int, 1: int}
+    support: Dict[int, int]
 
     # Loss
     avg_loss: float
@@ -77,18 +60,6 @@ def evaluate(
     dataloader: DataLoader,
     device:     torch.device = None,
 ) -> EvalResult:
-    """
-    Evaluate a model on a DataLoader. Returns full metrics.
-    Does NOT print anything — caller handles output.
-
-    Args:
-        model      : TransformerClassifier (or any nn.Module with 2-class output)
-        dataloader : validation DataLoader — typically 2,000 samples
-        device     : torch.device to run on. If None, auto-detects.
-
-    Returns:
-        EvalResult dataclass with all metrics populated
-    """
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -119,7 +90,6 @@ def evaluate(
             all_preds.extend(preds.cpu().tolist())
             all_labels.extend(batch_labels.cpu().tolist())
 
-    # Move model back to CPU to free GPU memory
     model.cpu()
 
     # ── Compute metrics from raw predictions ──────────────────────────────────
@@ -136,26 +106,10 @@ def _compute_metrics(
     labels:      list,
     avg_loss:    float,
 ) -> EvalResult:
-    """
-    Compute all classification metrics from raw prediction and label lists.
-    Pure Python — no sklearn dependency, no extra imports.
-
-    Metrics computed:
-        - Accuracy  : (TP + TN) / total
-        - Precision : TP / (TP + FP)  per class
-        - Recall    : TP / (TP + FN)  per class
-        - F1        : 2 * P * R / (P + R)  per class
-        - Macro avg : mean of per-class metrics
-    """
     classes = [0, 1]
     total   = len(labels)
     correct = sum(p == l for p, l in zip(predictions, labels))
 
-    # ── Confusion matrix counts per class ─────────────────────────────────────
-    # For class c:
-    #   TP = predicted c,  actual c
-    #   FP = predicted c,  actual not c
-    #   FN = predicted not c,  actual c
     tp = {c: 0 for c in classes}
     fp = {c: 0 for c in classes}
     fn = {c: 0 for c in classes}
@@ -176,16 +130,12 @@ def _compute_metrics(
     support   = {}
 
     for c in classes:
-        # Support = total actual samples of class c
         support[c] = sum(1 for l in labels if l == c)
 
-        # Precision: avoid divide-by-zero if model never predicts class c
         precision[c] = tp[c] / (tp[c] + fp[c]) if (tp[c] + fp[c]) > 0 else 0.0
 
-        # Recall: avoid divide-by-zero if class c has no samples
         recall[c] = tp[c] / (tp[c] + fn[c]) if (tp[c] + fn[c]) > 0 else 0.0
 
-        # F1: harmonic mean of precision and recall
         if precision[c] + recall[c] > 0:
             f1[c] = 2 * precision[c] * recall[c] / (precision[c] + recall[c])
         else:
@@ -213,7 +163,6 @@ def _compute_metrics(
 
 # ─────────────────────────────────────────────────────────────────────────────
 # FORMATTING HELPERS
-# Called by server.py and pretrain.py to format EvalResult for terminal output
 # ─────────────────────────────────────────────────────────────────────────────
 
 PRINT_WIDTH = 60
@@ -225,27 +174,14 @@ def format_eval_result(
     result:        EvalResult,
     round_num:     int   = None,
     total_rounds:  int   = None,
-    prev_accuracy: float = None,   # previous round accuracy (0.0–1.0) for delta
+    prev_accuracy: float = None,
 ) -> str:
-    """
-    Format an EvalResult into a clean terminal string block.
-    Returns a string — caller prints it.
 
-    Args:
-        result        : EvalResult from evaluate()
-        round_num     : current round number (None for pretrain)
-        total_rounds  : total rounds (None for pretrain)
-        prev_accuracy : previous round's accuracy for delta display
-
-    Returns:
-        Formatted multi-line string ready for print()
-    """
     lines = []
     W = PRINT_WIDTH
 
     def row(label, value, highlight=False):
         if highlight:
-            # Highlight with surrounding markers for key metric
             lines.append(f"  {'★ ' + label:<28}{value}  ★")
         else:
             lines.append(f"  {label:<28}{value}")
@@ -299,16 +235,6 @@ def format_eval_result(
 
 
 def format_accuracy_history(history: list) -> str:
-    """
-    Format a list of (round_num, accuracy_float) tuples into a summary table.
-    Called by server.py at the end of all rounds.
-
-    Args:
-        history : list of (round_num, accuracy) e.g. [(1, 0.714), (2, 0.738)]
-
-    Returns:
-        Formatted string
-    """
     lines = []
     lines.append(_line("═"))
     lines.append("  ACCURACY HISTORY")

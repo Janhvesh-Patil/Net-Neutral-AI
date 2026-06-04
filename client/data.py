@@ -1,27 +1,4 @@
 """
-data.py — Net-Neutral AI
-Dataset loading, vocabulary building, tokenisation, and DataLoader creation.
-
-Spec reference: TRD Section 6.2
-
-Dataset:   ajaykarthick/imdb-movie-reviews (primary)
-           standard 'imdb' via HuggingFace datasets (fallback)
-
-Splits:
-    Client A  : train rows 0     – 4,999   (5,000 samples)
-    Client B  : train rows 5,000 – 9,999   (5,000 samples)
-    Client C  : train rows 10,000– 14,999  (5,000 samples)
-    Validation: test  rows 0     – 1,999   (2,000 samples) — coordinator only
-
-Vocabulary:
-    Built from ALL 15,000 training rows combined.
-    Size: 10,000 tokens (top frequency words).
-    Token 0 = <PAD> (reserved — never assigned to a real word)
-    Token 1 = <UNK> (unknown words not in vocabulary)
-
-Max sequence length: 128 tokens (pad/truncate to this length)
-
-
 IMPORTANT RUN : python client/data.py data
 """
 
@@ -46,20 +23,18 @@ except ImportError:
 # ── Constants (must match config.py and TRD spec) ────────────────────────────
 VOCAB_SIZE   = 10_000
 MAX_LEN      = 128
-PAD_ID       = 0          # padding token — matches padding_idx in model.py
-UNK_ID       = 1          # unknown token
-TRAIN_SIZE   = 15_000     # total training samples used across all clients
-VAL_SIZE     = 2_000      # validation samples held on coordinator
-SHARD_SIZE   = 5_000      # samples per client
+PAD_ID       = 0
+UNK_ID       = 1
+TRAIN_SIZE   = 15_000
+VAL_SIZE     = 2_000
+SHARD_SIZE   = 5_000
 
-# Client shard index ranges (into the 15K training subset)
 SHARD_RANGES = {
     "client_A": (0,      4_999),
     "client_B": (5_000,  9_999),
     "client_C": (10_000, 14_999),
 }
 
-# Label mapping — handles both string and integer labels
 LABEL_MAP = {
     "positive": 1,
     "negative": 0,
@@ -75,22 +50,9 @@ LABEL_MAP = {
 # ─────────────────────────────────────────────────────────────────────────────
 
 def load_imdb_data(data_dir: Optional[str] = None) -> Tuple[List[str], List[int], List[str], List[int]]:
-    """
-    Load IMDb data from local CSV files (primary) or HuggingFace (fallback).
 
-    Args:
-        data_dir: path to folder containing train.csv and test.csv.
-                  If None or files not found, falls back to HuggingFace download.
-
-    Returns:
-        train_texts : list of 40,000 training review strings
-        train_labels: list of 40,000 integer labels (0=negative, 1=positive)
-        test_texts  : list of 10,000 test review strings
-        test_labels : list of 10,000 integer labels
-    """
     # ── Attempt 1: local CSV files ────────────────────────────────────────────
     if data_dir is not None:
-        # Support both imdb_train.csv (downloaded) and train.csv naming
         def _find_file(folder, *names):
             for name in names:
                 p = os.path.join(folder, name)
@@ -139,23 +101,17 @@ def load_imdb_data(data_dir: Optional[str] = None) -> Tuple[List[str], List[int]
 
 
 def _load_csv(path: str) -> Tuple[List[str], List[int]]:
-    """
-    Load a CSV file with columns: review, sentiment.
-    Handles the ajaykarthick dataset format.
-    """
+
     import csv
     texts, labels = [], []
     with open(path, encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            # column names may vary slightly — try both
             text  = row.get("review") or row.get("text") or row.get("Review") or ""
             label = row.get("sentiment") or row.get("label") or row.get("Sentiment") or "0"
             text  = text.strip()
-            # Handle integer labels (0/1) and string labels ("positive"/"negative")
             if isinstance(label, str):
                 label_clean = label.strip().lower()
-                # If it's a digit string like "0" or "1", convert directly
                 if label_clean.isdigit():
                     resolved = int(label_clean)
                 else:
@@ -169,10 +125,7 @@ def _load_csv(path: str) -> Tuple[List[str], List[int]]:
 
 
 def _extract_hf_split(split) -> Tuple[List[str], List[int]]:
-    """
-    Extract texts and labels from a HuggingFace dataset split.
-    Handles both string labels (positive/negative) and integer labels (0/1).
-    """
+
     texts, labels = [], []
     for item in split:
         text  = item.get("review") or item.get("text") or ""
@@ -189,25 +142,15 @@ def _extract_hf_split(split) -> Tuple[List[str], List[int]]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def clean_text(text: str) -> str:
-    """
-    Minimal text cleaning.
-    - Lowercase
-    - Remove HTML tags (IMDb reviews often contain <br /> tags)
-    - Remove non-alphanumeric characters except spaces
-    - Collapse multiple spaces
-    """
+
     text = text.lower()
-    text = re.sub(r"<[^>]+>", " ", text)          # remove HTML tags
-    text = re.sub(r"[^a-z0-9\s]", " ", text)      # keep only letters, digits, spaces
-    text = re.sub(r"\s+", " ", text).strip()       # collapse whitespace
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"[^a-z0-9\s]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
     return text
 
 
 def tokenise(text: str) -> List[str]:
-    """
-    Whitespace tokeniser. Splits on spaces after cleaning.
-    Returns list of string tokens.
-    """
     return clean_text(text).split()
 
 
@@ -216,13 +159,6 @@ def tokenise(text: str) -> List[str]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class Vocabulary:
-    """
-    Builds and stores the word → integer ID mapping.
-
-    Token 0 = <PAD>  (padding — must match padding_idx in model.py)
-    Token 1 = <UNK>  (unknown words)
-    Tokens 2+ = real words sorted by frequency (most frequent first)
-    """
 
     def __init__(self):
         self.word2id: Dict[str, int] = {"<PAD>": 0, "<UNK>": 1}
@@ -230,20 +166,13 @@ class Vocabulary:
         self.size: int = 2   # starts at 2 (0 and 1 reserved)
 
     def build(self, texts: List[str], max_size: int = VOCAB_SIZE) -> None:
-        """
-        Build vocabulary from a list of raw text strings.
 
-        Args:
-            texts    : list of raw review strings (should be ALL 15K training texts)
-            max_size : maximum vocabulary size including <PAD> and <UNK>
-        """
         print(f"[Vocabulary] Building from {len(texts):,} texts...")
         counter = Counter()
         for text in texts:
             tokens = tokenise(text)
             counter.update(tokens)
 
-        # Keep top (max_size - 2) words — leave room for <PAD> and <UNK>
         most_common = counter.most_common(max_size - 2)
         print(f"[Vocabulary] Unique tokens found: {len(counter):,}  →  keeping top {len(most_common):,}")
 
@@ -256,19 +185,16 @@ class Vocabulary:
         print(f"[Vocabulary] Final vocabulary size: {self.size:,}")
 
     def encode(self, text: str) -> List[int]:
-        """Convert a raw text string to a list of integer token IDs."""
         tokens = tokenise(text)
         return [self.word2id.get(token, UNK_ID) for token in tokens]
 
     def save(self, path: str) -> None:
-        """Save vocabulary to a JSON file so all clients use identical mapping."""
         with open(path, "w") as f:
             json.dump(self.word2id, f)
         print(f"[Vocabulary] Saved to {path}")
 
     @classmethod
     def load(cls, path: str) -> "Vocabulary":
-        """Load a previously saved vocabulary from JSON."""
         vocab = cls()
         with open(path, "r") as f:
             word2id = json.load(f)
@@ -284,11 +210,6 @@ class Vocabulary:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class IMDbDataset(Dataset):
-    """
-    PyTorch Dataset for IMDb sentiment classification.
-
-    Converts raw text + label pairs into padded/truncated token ID tensors.
-    """
 
     def __init__(
         self,
@@ -297,13 +218,7 @@ class IMDbDataset(Dataset):
         vocab:   Vocabulary,
         max_len: int = MAX_LEN,
     ):
-        """
-        Args:
-            texts  : list of raw review strings
-            labels : list of integer labels (0 or 1)
-            vocab  : built Vocabulary instance
-            max_len: pad or truncate all sequences to this length
-        """
+
         assert len(texts) == len(labels), "texts and labels must have the same length"
         self.texts   = texts
         self.labels  = labels
@@ -314,17 +229,11 @@ class IMDbDataset(Dataset):
         return len(self.texts)
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Returns:
-            input_ids : LongTensor of shape (max_len,) — padded/truncated token IDs
-            label     : LongTensor scalar — 0 or 1
-        """
+
         token_ids = self.vocab.encode(self.texts[idx])
 
-        # Truncate if longer than max_len
         token_ids = token_ids[:self.max_len]
 
-        # Pad with PAD_ID (0) if shorter than max_len
         padding   = [PAD_ID] * (self.max_len - len(token_ids))
         token_ids = token_ids + padding
 
@@ -346,20 +255,7 @@ def get_client_dataloader(
     batch_size: int = 32,
     shuffle:    bool = True,
 ) -> DataLoader:
-    """
-    Returns a DataLoader for a specific client's data shard.
 
-    Args:
-        client_id    : one of 'client_A', 'client_B', 'client_C'
-        train_texts  : full list of 15K (or more) training texts
-        train_labels : full list of matching labels
-        vocab        : built Vocabulary instance
-        batch_size   : samples per batch
-        shuffle      : whether to shuffle each epoch
-
-    Returns:
-        DataLoader yielding (input_ids, labels) batches
-    """
     if client_id not in SHARD_RANGES:
         raise ValueError(f"Unknown client_id '{client_id}'. Must be one of {list(SHARD_RANGES.keys())}")
 
@@ -380,20 +276,7 @@ def get_validation_dataloader(
     vocab:       Vocabulary,
     batch_size:  int = 64,
 ) -> DataLoader:
-    """
-    Returns a DataLoader for the coordinator's validation set.
-    Uses the first VAL_SIZE samples from the test split.
-    Shuffle is False — evaluation should be deterministic.
 
-    Args:
-        test_texts  : full list of test texts
-        test_labels : full list of test labels
-        vocab       : built Vocabulary instance
-        batch_size  : samples per batch (larger is fine for eval — no gradients)
-
-    Returns:
-        DataLoader yielding (input_ids, labels) batches
-    """
     val_texts  = test_texts[:VAL_SIZE]
     val_labels = test_labels[:VAL_SIZE]
 
@@ -410,20 +293,7 @@ def get_full_dataloader(
     batch_size: int = 32,
     shuffle:    bool = True,
 ) -> DataLoader:
-    """
-    Returns a DataLoader for an arbitrary text/label list.
-    Used by pretrain.py (full 15K) and the analytics tests you specified.
 
-    Args:
-        texts      : any list of raw text strings
-        labels     : matching list of integer labels
-        vocab      : built Vocabulary instance
-        batch_size : samples per batch
-        shuffle    : whether to shuffle
-
-    Returns:
-        DataLoader yielding (input_ids, labels) batches
-    """
     dataset = IMDbDataset(texts, labels, vocab)
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
 
@@ -437,40 +307,12 @@ def setup_data(
     vocab_path:   Optional[str] = None,
     save_vocab:   bool = True,
 ) -> Tuple[List[str], List[int], List[str], List[int], Vocabulary]:
-    """
-    One-call setup function used by client.py, server.py, and pretrain.py.
 
-    Loads data, builds (or loads) vocabulary, returns everything needed
-    to create DataLoaders.
-
-    Args:
-        data_dir   : path to folder with train.csv and test.csv (or None for HF)
-        vocab_path : path to saved vocabulary JSON (or None to build fresh)
-        save_vocab : if True and building fresh, saves vocab to vocab_path
-
-    Returns:
-        train_texts  : list of 40K training strings (full dataset)
-        train_labels : list of 40K training labels
-        test_texts   : list of 10K test strings
-        test_labels  : list of 10K test labels
-        vocab        : built Vocabulary instance
-
-    Usage:
-        train_texts, train_labels, test_texts, test_labels, vocab = setup_data(
-            data_dir   = './data',
-            vocab_path = './data/vocab.json',
-        )
-        loader = get_client_dataloader('client_A', train_texts, train_labels, vocab)
-    """
-    # Load raw data
     train_texts, train_labels, test_texts, test_labels = load_imdb_data(data_dir)
 
-    # Build or load vocabulary
     if vocab_path and os.path.exists(vocab_path):
         vocab = Vocabulary.load(vocab_path)
     else:
-        # Build from the 15K training subset — NOT the full 40K
-        # Reason: vocab must be identical across clients, built from same source
         vocab = Vocabulary()
         vocab.build(train_texts[:TRAIN_SIZE], max_size=VOCAB_SIZE)
         if save_vocab and vocab_path:
@@ -492,8 +334,6 @@ if __name__ == "__main__":
     print("=" * 60)
 
     # ── Accept optional data_dir argument ─────────────────────────────────────
-    # Run as: python data.py ./data
-    # Or just: python data.py (uses HuggingFace fallback)
     data_dir   = sys.argv[1] if len(sys.argv) > 1 else None
     vocab_path = os.path.join(data_dir, "vocab.json") if data_dir else None
 

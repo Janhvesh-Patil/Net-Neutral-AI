@@ -1,19 +1,3 @@
-"""
-credits.py — Net-Neutral AI
-SQLite credit ledger — tracks compute contributions and rewards.
-
-Spec reference: Backend Schema Document Section 3, Section 4
-
-Tables managed:
-    credits : one row per client per round
-    rounds  : one row per completed round
-
-All database operations are in this file.
-server.py calls these functions — it never writes SQL directly.
-
-Database location: coordinator/database.db (auto-created on first run)
-"""
-
 import os
 import sqlite3
 import datetime
@@ -26,7 +10,6 @@ COORDINATOR_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH         = os.path.join(COORDINATOR_DIR, "database.db")
 
 # ── Credit formula ────────────────────────────────────────────────────────────
-# Spec: points = floor(samples_trained / 5)
 def compute_points(samples_trained: int) -> int:
     return samples_trained // 5
 
@@ -35,7 +18,7 @@ def compute_points(samples_trained: int) -> int:
 
 @dataclass
 class CreditRecord:
-    """One row from the credits table."""
+
     id:              int
     client_id:       str
     round:           int
@@ -47,7 +30,7 @@ class CreditRecord:
 
 @dataclass
 class RoundRecord:
-    """One row from the rounds table."""
+
     id:                int
     round_number:      int
     started_at:        str
@@ -59,7 +42,7 @@ class RoundRecord:
 
 @dataclass
 class LeaderboardEntry:
-    """One row from the leaderboard query."""
+
     rank:               int
     client_id:          str
     total_points:       int
@@ -72,14 +55,7 @@ class LeaderboardEntry:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def init_db(db_path: str = DB_PATH) -> None:
-    """
-    Create database and tables if they don't exist.
-    Safe to call multiple times — uses IF NOT EXISTS.
-    Called once by server.py on startup.
 
-    Args:
-        db_path : path to SQLite database file
-    """
     conn   = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
@@ -117,14 +93,7 @@ def init_db(db_path: str = DB_PATH) -> None:
 
 
 def reset_db(db_path: str = DB_PATH) -> None:
-    """
-    Drop all data and recreate tables.
-    Call this between demo runs to start fresh.
-    WARNING: deletes all credits and round history.
 
-    Args:
-        db_path : path to SQLite database file
-    """
     conn   = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.executescript("""
@@ -150,21 +119,7 @@ def log_credit(
     time_seconds:    float,
     db_path:         str = DB_PATH,
 ) -> int:
-    """
-    Insert one credit record after a client submits weights.
-    Points are computed here — never trusted from client.
 
-    Args:
-        client_id       : e.g. 'client_A'
-        round_num       : current round number
-        samples_trained : number of samples client trained on
-        time_seconds    : wall-clock training time
-        db_path         : path to database
-
-    Returns:
-        points_earned : computed credit points for this submission
-    """
-    # Guard: reject duplicate submission for same client + round
     if _submission_exists(client_id, round_num, db_path):
         print(f"[Credits] ⚠  Duplicate submission ignored: {client_id} round {round_num}")
         return 0
@@ -195,21 +150,7 @@ def log_round(
     global_accuracy:   float,
     db_path:           str = DB_PATH,
 ) -> float:
-    """
-    Insert one round record after FedAvg and evaluation complete.
-    Computes accuracy_delta vs previous round automatically.
 
-    Args:
-        round_number      : 1-indexed round number
-        started_at        : datetime when operator typed start_round
-        clients_submitted : how many clients submitted this round
-        global_accuracy   : model accuracy after FedAvg (0.0–1.0)
-        db_path           : path to database
-
-    Returns:
-        accuracy_delta : change vs previous round (negative if regression)
-    """
-    # Get previous round accuracy for delta calculation
     prev_accuracy = _get_previous_accuracy(round_number, db_path)
     delta         = global_accuracy - prev_accuracy
 
@@ -244,12 +185,7 @@ def log_round(
 # ─────────────────────────────────────────────────────────────────────────────
 
 def get_leaderboard(db_path: str = DB_PATH) -> List[LeaderboardEntry]:
-    """
-    Get cumulative credit leaderboard — all clients sorted by total points.
 
-    Returns:
-        List of LeaderboardEntry sorted descending by total_points
-    """
     conn   = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute("""
@@ -278,12 +214,7 @@ def get_leaderboard(db_path: str = DB_PATH) -> List[LeaderboardEntry]:
 
 
 def get_accuracy_history(db_path: str = DB_PATH) -> List[Tuple[int, float]]:
-    """
-    Get per-round accuracy history for the final summary printout.
 
-    Returns:
-        List of (round_number, global_accuracy) tuples ordered by round
-    """
     conn   = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute("""
@@ -297,16 +228,7 @@ def get_accuracy_history(db_path: str = DB_PATH) -> List[Tuple[int, float]]:
 
 
 def get_submitted_clients(round_num: int, db_path: str = DB_PATH) -> List[str]:
-    """
-    Get list of client_ids that have submitted for a given round.
-    Used by server.py to check if all clients have submitted.
 
-    Args:
-        round_num : round number to check
-
-    Returns:
-        List of client_ids who submitted this round
-    """
     conn   = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute(
@@ -322,16 +244,7 @@ def get_round_credits(
     round_num: int,
     db_path:   str = DB_PATH,
 ) -> Dict[str, int]:
-    """
-    Get credits earned by each client in a specific round.
-    Used by server.py to include in the round summary terminal output.
 
-    Args:
-        round_num : round number
-
-    Returns:
-        Dict mapping client_id → points_earned this round
-    """
     conn   = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute(
@@ -347,16 +260,7 @@ def get_client_total_credits(
     client_id: str,
     db_path:   str = DB_PATH,
 ) -> int:
-    """
-    Get cumulative total credits for one client across all rounds.
-    Returned to client after each submission so they can display it.
 
-    Args:
-        client_id : e.g. 'client_A'
-
-    Returns:
-        Total points earned across all rounds
-    """
     conn   = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute(
@@ -377,10 +281,6 @@ PRINT_WIDTH = 60
 def _line(char="─"): return char * PRINT_WIDTH
 
 def format_leaderboard(entries: List[LeaderboardEntry], round_num: int) -> str:
-    """
-    Format leaderboard for terminal output after each round.
-    Called by server.py to print after FedAvg completes.
-    """
     lines = []
     lines.append(_line("─"))
     lines.append(f"  Leaderboard after Round {round_num}")
@@ -399,10 +299,7 @@ def format_leaderboard(entries: List[LeaderboardEntry], round_num: int) -> str:
 
 
 def format_final_leaderboard(entries: List[LeaderboardEntry]) -> str:
-    """
-    Format the final leaderboard for the end-of-session summary.
-    More detailed than the per-round version.
-    """
+
     lines = []
     lines.append(_line("═"))
     lines.append("  FINAL LEADERBOARD")
@@ -433,7 +330,6 @@ def _submission_exists(
     round_num: int,
     db_path:   str,
 ) -> bool:
-    """Check if a credit record already exists for this client + round."""
     conn   = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute(
@@ -446,10 +342,6 @@ def _submission_exists(
 
 
 def _get_previous_accuracy(round_number: int, db_path: str) -> float:
-    """
-    Get the global_accuracy of the previous round.
-    Returns 0.0 for round 1 (no previous round exists).
-    """
     if round_number <= 1:
         return 0.0
     conn   = sqlite3.connect(db_path)
@@ -475,7 +367,6 @@ if __name__ == "__main__":
     print("  credits.py sanity check")
     print("=" * PRINT_WIDTH)
 
-    # Use a temp database so we don't pollute the real one
     tmp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
     tmp_db_path = tmp_db.name
     tmp_db.close()

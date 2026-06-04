@@ -1,21 +1,3 @@
-"""
-model.py — Net-Neutral AI
-TransformerClassifier: 2-layer Transformer for binary sentiment classification
-
-Spec reference: TRD Section 6.1
-Architecture:
-    1. Embedding layer         (vocab_size=10000, embed_dim=128)
-    2. Positional encoding     (learned, max_len=128)
-    3. TransformerEncoder x2   (nhead=4, dim_feedforward=256, dropout=0.1)
-    4. Global average pooling  (mean across sequence dimension)
-    5. Linear classifier       (128 → 2)
-
-Input:  token IDs  — shape (batch_size, seq_len)
-Output: raw logits — shape (batch_size, 2)
-        class 0 = negative sentiment
-        class 1 = positive sentiment
-"""
-
 import torch
 import torch.nn as nn
 
@@ -33,22 +15,9 @@ class TransformerClassifier(nn.Module):
             dropout: float = 0.1,
             num_classes: int = 2,
     ):
-        """
-        Args:
-            vocab_size  : number of unique tokens in vocabulary
-            embed_dim   : dimension of token embeddings (d_model)
-            num_heads   : number of attention heads in each encoder layer
-            ffn_dim     : hidden dimension of the feedforward sublayer
-            num_layers  : number of stacked TransformerEncoder layers
-            max_len     : maximum sequence length (for positional encoding)
-            dropout     : dropout probability applied inside encoder layers
-            num_classes : output classes (2 for binary sentiment)
-        """
         super().__init__()
 
         # ── 1. Token embedding ────────────────────────────────────────────────
-        # Maps each integer token ID → a learned vector of size embed_dim.
-        # padding_idx=0 means the padding token contributes zero to gradients.
         self.token_embedding = nn.Embedding(
             num_embeddings=vocab_size,
             embedding_dim=embed_dim,
@@ -56,35 +25,25 @@ class TransformerClassifier(nn.Module):
         )
 
         # ── 2. Positional encoding (learned) ──────────────────────────────────
-        # Each position 0..max_len-1 gets its own learned vector of size embed_dim.
-        # These are ADDED to the token embeddings so the model knows word order.
-        # We store positions as a parameter so they are saved in state_dict.
         self.position_embedding = nn.Embedding(
             num_embeddings=max_len,
             embedding_dim=embed_dim,
         )
 
         # ── 3. Transformer encoder layers ─────────────────────────────────────
-        # One TransformerEncoderLayer = multi-head self-attention + feedforward.
-        # We stack num_layers of these using TransformerEncoder.
         encoder_layer = nn.TransformerEncoderLayer(
-            d_model=embed_dim,  # input/output size of each layer
-            nhead=num_heads,  # must divide embed_dim evenly: 128/4 = 32 ✓
-            dim_feedforward=ffn_dim,  # hidden size inside feedforward sublayer
+            d_model=embed_dim,
+            nhead=num_heads,
+            dim_feedforward=ffn_dim,
             dropout=dropout,
-            batch_first=True,  # input shape: (batch, seq, embed) not (seq, batch, embed)
+            batch_first=True,
         )
         self.transformer_encoder = nn.TransformerEncoder(
             encoder_layer=encoder_layer,
             num_layers=num_layers,
         )
 
-        # ── 4. Global average pooling ─────────────────────────────────────────
-        # No parameters here — this is just an operation in forward().
-        # We take the mean across the sequence dimension → (batch, embed_dim).
-
-        # ── 5. Linear classifier ──────────────────────────────────────────────
-        # Maps the pooled vector to logits for each class.
+        # ── 4. Linear classifier ──────────────────────────────────────────────
         self.classifier = nn.Linear(embed_dim, num_classes)
 
         # ── Dropout for regularisation ────────────────────────────────────────
@@ -97,11 +56,6 @@ class TransformerClassifier(nn.Module):
         self._init_weights()
 
     def _init_weights(self):
-        """
-        Xavier uniform initialisation for the classifier layer.
-        Embedding weights use PyTorch's default (normal distribution).
-        This gives the model a stable starting point for training.
-        """
         nn.init.xavier_uniform_(self.classifier.weight)
         nn.init.zeros_(self.classifier.bias)
 
@@ -127,12 +81,9 @@ class TransformerClassifier(nn.Module):
             seq_len = self.max_len
 
         # ── Step 1: Token embeddings ──────────────────────────────────────────
-        # input_ids: (batch, seq_len)  →  token_embeds: (batch, seq_len, embed_dim)
         token_embeds = self.token_embedding(input_ids)
 
         # ── Step 2: Positional embeddings ─────────────────────────────────────
-        # Build position indices [0, 1, 2, ..., seq_len-1] for every item in batch.
-        # positions: (seq_len,)  →  expand to (batch_size, seq_len)
         positions = torch.arange(seq_len, device=input_ids.device)
         positions = positions.unsqueeze(0).expand(batch_size, -1)
 
@@ -140,35 +91,22 @@ class TransformerClassifier(nn.Module):
         position_embeds = self.position_embedding(positions)
 
         # ── Step 3: Add token + position embeddings, apply dropout ────────────
-        # x: (batch, seq_len, embed_dim)
         x = self.dropout(token_embeds + position_embeds)
 
         # ── Step 4: Build padding mask ────────────────────────────────────────
-        # Tells the attention mechanism to ignore padding tokens (id = 0).
-        # src_key_padding_mask: True where token is padding → attention ignores it.
-        # Shape: (batch, seq_len) — True means "ignore this position"
         padding_mask = (input_ids == 0)
 
         # ── Step 5: Transformer encoder ───────────────────────────────────────
-        # x: (batch, seq_len, embed_dim)  →  x: (batch, seq_len, embed_dim)
         x = self.transformer_encoder(x, src_key_padding_mask=padding_mask)
 
         # ── Step 6: Global average pooling ────────────────────────────────────
-        # We want one vector per sample, not one per token.
-        # Exclude padding positions from the mean to avoid diluting the signal.
-        #
-        # padding_mask is True for padding → we want the opposite for weighting.
-        # valid_mask: (batch, seq_len, 1) — 1.0 for real tokens, 0.0 for padding
         valid_mask = (~padding_mask).float().unsqueeze(-1)
 
-        # Zero out padding positions, sum, divide by number of real tokens
         x = (x * valid_mask).sum(dim=1) / valid_mask.sum(dim=1).clamp(min=1e-9)
-        # x: (batch, embed_dim)
 
         # ── Step 7: Classify ──────────────────────────────────────────────────
         x = self.dropout(x)
         logits = self.classifier(x)
-        # logits: (batch, 2)
 
         return logits
 
@@ -184,15 +122,12 @@ if __name__ == "__main__":
 
     print("Running model.py sanity check...\n")
 
-    # Build model with default hyperparameters from TRD
     model = TransformerClassifier()
 
-    # Dummy input: batch of 8 sequences, each 128 tokens long
     dummy_input = torch.randint(low=1, high=10_000, size=(8, 128))
 
-    # Include some padding tokens to test padding mask
-    dummy_input[0, 100:] = 0  # last 28 tokens of first sample are padding
-    dummy_input[3, 64:] = 0  # last 64 tokens of fourth sample are padding
+    dummy_input[0, 100:] = 0
+    dummy_input[3, 64:] = 0
 
     # Forward pass
     model.eval()
@@ -217,4 +152,3 @@ if __name__ == "__main__":
         print(f"  {k:55s}  {str(v.shape):30s}  {v.dtype}")
 
     print("\nAll checks passed. model.py is ready.")
-#%% raw

@@ -1,24 +1,3 @@
-"""
-fedavg.py — Net-Neutral AI
-Federated Averaging (FedAvg) algorithm — weighted implementation.
-
-Spec reference: TRD Section 4.3, App Flow Section 5.5
-
-Algorithm (McMahan et al. 2017 — weighted variant):
-    global_weight[key] = Σ(client_weight[key] × client_samples) / Σ(all_samples)
-
-In the prototype all clients have 5,000 samples — weighted and unweighted
-produce identical results. Weighted is kept for correctness in production
-where clients may have unequal data sizes.
-
-Edge cases handled:
-    - Missing client (timed out)  — excluded, N decremented
-    - Corrupted weight file       — excluded with warning
-    - All clients missing         — raises FedAvgError
-    - Weight shape mismatch       — excluded with warning
-    - Missing sample count        — falls back to equal weight for that client
-"""
-
 import os
 import torch
 from typing import Dict, List, Tuple, Optional

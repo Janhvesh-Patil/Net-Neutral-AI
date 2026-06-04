@@ -1,12 +1,11 @@
 """
 pretrain.py — Net-Neutral AI
-One-time baseline training. Run ONCE before the demo on a GPU machine.
+One-time baseline training.
 
 ⚠️  DO NOT run on CPU — 15K samples x 5 epochs ≈ 40–50 minutes on CPU.
-    Run on ENTC1's GPU machine — takes 5–8 minutes.
 
 Purpose:
-    Train TransformerClassifier on the full 15,000 sample dataset
+    Train TransformerClassifier on the full sample dataset
     for 5 epochs. Save the result as coordinator/checkpoint.pt.
     This checkpoint is the starting point for Round 1 of federated training.
 

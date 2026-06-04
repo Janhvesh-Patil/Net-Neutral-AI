@@ -2,7 +2,7 @@
 
 **Branch**: `scope_creep`  
 **Date**: June 4, 2026 4:04 PDT
-**Author**: Claude AI Implementation  
+**Author**: Atharv Huilgol with Claude AI Implementation  
 **Status**: Ready for Review & Testing
 
 ---

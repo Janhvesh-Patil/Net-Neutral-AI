@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Net-Neutral AI - Federated Learning Platform</title>
+    <meta name="description" content="Decentralized federated learning platform for privacy-preserving AI training">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+
+        <!-- ============================================================ -->
+        <!-- SCREEN 1: ROLE SELECTION                                     -->
+        <!-- ============================================================ -->
+        <div id="screen-role" class="screen active">
+            <h1 id="main-title">Net-Neutral AI</h1>
+            <p class="subtitle">Federated Learning Platform</p>
+
+            <div class="role-cards">
+                <div class="role-card" id="btn-coordinator" onclick="selectRole('coordinator')">
+                    <div class="role-icon">&#x1F4E1;</div>
+                    <h2>Coordinator</h2>
+                    <p>Host a training session. Upload data, manage clients, and orchestrate federated learning.</p>
+                </div>
+                <div class="role-card" id="btn-client" onclick="selectRole('client')">
+                    <div class="role-icon">&#x1F4BB;</div>
+                    <h2>Client</h2>
+                    <p>Join a training session. Connect to a coordinator and contribute to model training.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- SCREEN 2A: COORDINATOR SETUP                                 -->
+        <!-- ============================================================ -->
+        <div id="screen-coordinator-setup" class="screen">
+            <a href="#" class="back-btn" onclick="goBack(); return false;">&larr; Back</a>
+            <h1>Coordinator Setup</h1>
+
+            <div class="card">
+                <h2>Network Configuration</h2>
+                <div class="form-group">
+                    <label for="coord-ip">Your IP Address</label>
+                    <input type="text" id="coord-ip" placeholder="e.g. 192.168.1.100" value="localhost">
+                </div>
+                <div class="form-group">
+                    <label for="coord-port">Port</label>
+                    <input type="number" id="coord-port" value="5000" min="1000" max="65535">
+                </div>
+                <div class="form-group">
+                    <label for="coord-clients">Number of Clients</label>
+                    <select id="coord-clients">
+                        <option value="1">1 Client</option>
+                        <option value="2">2 Clients</option>
+                        <option value="3" selected>3 Clients (Max)</option>
+                    </select>
+                </div>
+                <button id="btn-launch-coordinator" onclick="launchCoordinator()">Launch Coordinator Dashboard</button>
+                <div id="coord-setup-status"></div>
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- SCREEN 2B: CLIENT SETUP                                      -->
+        <!-- ============================================================ -->
+        <div id="screen-client-setup" class="screen">
+            <a href="#" class="back-btn" onclick="goBack(); return false;">&larr; Back</a>
+            <h1>Client Setup</h1>
+
+            <div class="card">
+                <h2>Connect to Coordinator</h2>
+                <div class="form-group">
+                    <label for="client-coord-ip">Coordinator IP Address</label>
+                    <input type="text" id="client-coord-ip" placeholder="e.g. 192.168.1.100">
+                </div>
+                <div class="form-group">
+                    <label for="client-coord-port">Coordinator Port</label>
+                    <input type="number" id="client-coord-port" value="5000" min="1000" max="65535">
+                </div>
+                <div class="form-group">
+                    <label for="client-name">Your Client Name</label>
+                    <select id="client-name">
+                        <option value="client_A">Client A</option>
+                        <option value="client_B">Client B</option>
+                        <option value="client_C">Client C</option>
+                    </select>
+                </div>
+                <button id="btn-connect-client" onclick="connectAsClient()">Connect to Coordinator</button>
+                <div id="client-setup-status"></div>
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- SCREEN 3A: COORDINATOR DASHBOARD                             -->
+        <!-- ============================================================ -->
+        <div id="screen-coordinator-dashboard" class="screen">
+            <div class="dashboard-header">
+                <h1>Coordinator Dashboard</h1>
+                <span class="badge" id="coord-url-badge">localhost:5000</span>
+            </div>
+
+            <!-- Upload Dataset -->
+            <div class="card">
+                <h2>Step 1: Upload Dataset</h2>
+                <div class="form-row">
+                    <input type="file" id="datasetInput" accept=".csv">
+                    <button onclick="uploadDataset()">Upload CSV</button>
+                </div>
+                <div id="uploadStatus"></div>
+            </div>
+
+            <!-- Connected Clients -->
+            <div class="card">
+                <h2>Step 2: Connected Clients</h2>
+                <button onclick="refreshClients()" class="btn-secondary">Refresh</button>
+                <table id="clientsTable">
+                    <thead>
+                        <tr>
+                            <th>Client ID</th>
+                            <th>IP Address</th>
+                            <th>Status</th>
+                            <th>Data Received</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+                <div id="clientCount">Connected: 0 clients</div>
+            </div>
+
+            <!-- Start Training -->
+            <div class="card">
+                <h2>Step 3: Start Training</h2>
+                <button id="btn-start-training" onclick="startTraining()">Start Federated Training</button>
+                <div id="trainingStatus"></div>
+            </div>
+
+            <!-- Live Log -->
+            <div class="card">
+                <h2>Training Log</h2>
+                <div id="trainingLog"></div>
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- SCREEN 3B: CLIENT DASHBOARD                                  -->
+        <!-- ============================================================ -->
+        <div id="screen-client-dashboard" class="screen">
+            <div class="dashboard-header">
+                <h1 id="client-dashboard-title">Client Dashboard</h1>
+                <span class="badge" id="client-name-badge">client_A</span>
+            </div>
+
+            <div class="card">
+                <h2>Connection Status</h2>
+                <div class="status-grid">
+                    <div class="stat-item">
+                        <span class="stat-label">Status</span>
+                        <span class="stat-value" id="client-conn-status">Connecting...</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Coordinator</span>
+                        <span class="stat-value" id="client-coord-url">--</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Training Progress</h2>
+                <div class="status-grid">
+                    <div class="stat-item">
+                        <span class="stat-label">Current Round</span>
+                        <span class="stat-value" id="client-round">--</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Round Status</span>
+                        <span class="stat-value" id="client-round-status">--</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Credits Earned</span>
+                        <span class="stat-value" id="client-credits">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Global Accuracy</span>
+                        <span class="stat-value" id="client-accuracy">--</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Activity Log</h2>
+                <div id="clientLog"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

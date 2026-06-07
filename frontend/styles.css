@@ -1,0 +1,396 @@
+/* ============================================================
+   Net-Neutral AI — Frontend Styles
+   Basic functional layout. Teammate will polish after push.
+   ============================================================ */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #333;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.container {
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+/* ── Screen Management ──────────────────────────────────────── */
+
+.screen {
+    display: none;
+}
+
+.screen.active {
+    display: block;
+}
+
+/* ── Role Selection Screen ──────────────────────────────────── */
+
+h1 {
+    text-align: center;
+    color: white;
+    margin-bottom: 10px;
+    font-size: 2.5em;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.subtitle {
+    text-align: center;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 1.2em;
+    margin-bottom: 40px;
+}
+
+.role-cards {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 20px;
+}
+
+.role-card {
+    background: white;
+    border-radius: 16px;
+    padding: 40px 30px;
+    width: 320px;
+    text-align: center;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.role-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+}
+
+.role-icon {
+    font-size: 3em;
+    margin-bottom: 16px;
+}
+
+.role-card h2 {
+    color: #667eea;
+    margin-bottom: 12px;
+    font-size: 1.5em;
+}
+
+.role-card p {
+    color: #666;
+    line-height: 1.5;
+}
+
+/* ── Back Button ────────────────────────────────────────────── */
+
+.back-btn {
+    display: inline-block;
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9em;
+    margin-bottom: 20px;
+    transition: background 0.2s;
+    text-decoration: none;
+}
+
+.back-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    color: white;
+}
+
+/* ── Cards ──────────────────────────────────────────────────── */
+
+.card {
+    background: white;
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 20px;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+}
+
+.card h2 {
+    color: #667eea;
+    margin-bottom: 20px;
+    font-size: 1.3em;
+    border-bottom: 2px solid #667eea;
+    padding-bottom: 10px;
+}
+
+/* ── Forms ──────────────────────────────────────────────────── */
+
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-group label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #555;
+}
+
+.form-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+input[type="file"],
+input[type="text"],
+input[type="number"],
+select {
+    padding: 12px;
+    border: 2px solid #ddd;
+    border-radius: 6px;
+    font-size: 1em;
+    width: 100%;
+    transition: border-color 0.3s;
+}
+
+input:focus, select:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 8px rgba(102, 126, 234, 0.3);
+}
+
+.form-row input[type="file"] {
+    flex: 1;
+    min-width: 200px;
+}
+
+/* ── Buttons ────────────────────────────────────────────────── */
+
+button {
+    padding: 12px 24px;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 1em;
+    font-weight: 600;
+    transition: background 0.3s, transform 0.1s;
+    margin-top: 8px;
+}
+
+button:hover {
+    background: #764ba2;
+    transform: scale(1.02);
+}
+
+button:active {
+    transform: scale(0.98);
+}
+
+button:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.btn-secondary {
+    background: #f0f0f0;
+    color: #333;
+    font-size: 0.9em;
+    padding: 8px 16px;
+}
+
+.btn-secondary:hover {
+    background: #e0e0e0;
+}
+
+/* ── Dashboard Header ───────────────────────────────────────── */
+
+.dashboard-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.dashboard-header h1 {
+    text-align: left;
+    font-size: 2em;
+    margin-bottom: 0;
+}
+
+.badge {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.9em;
+    font-weight: 600;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* ── Status Grid (Client Dashboard) ─────────────────────────── */
+
+.status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+}
+
+.stat-item {
+    background: #f6f8fa;
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+}
+
+.stat-label {
+    display: block;
+    color: #888;
+    font-size: 0.85em;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stat-value {
+    display: block;
+    font-size: 1.4em;
+    font-weight: 700;
+    color: #333;
+}
+
+/* ── Table ──────────────────────────────────────────────────── */
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 16px;
+    font-size: 0.95em;
+}
+
+table thead {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+table th {
+    padding: 12px 15px;
+    text-align: left;
+    font-weight: 600;
+}
+
+table td {
+    padding: 10px 15px;
+    border-bottom: 1px solid #eee;
+}
+
+table tbody tr:hover {
+    background: #f5f5f5;
+}
+
+table tbody tr:nth-child(even) {
+    background: #fafafa;
+}
+
+/* ── Status Classes ─────────────────────────────────────────── */
+
+.status-success {
+    color: #22863a;
+    font-weight: 600;
+}
+
+.status-error {
+    color: #cb2431;
+    font-weight: 600;
+}
+
+.status-pending {
+    color: #d4a574;
+    font-weight: 600;
+}
+
+/* ── Log Panel ──────────────────────────────────────────────── */
+
+#trainingLog, #clientLog {
+    background: #f6f8fa;
+    border: 1px solid #d1d5da;
+    padding: 16px;
+    border-radius: 6px;
+    height: 350px;
+    overflow-y: auto;
+    font-family: 'Monaco', 'Courier New', monospace;
+    font-size: 0.85em;
+    line-height: 1.5;
+}
+
+.log-entry {
+    margin: 4px 0;
+    padding: 6px 8px;
+    border-radius: 3px;
+}
+
+.log-entry.info    { color: #24292e; background: #f6f8fa; }
+.log-entry.success { color: #22863a; background: #f0fff4; }
+.log-entry.error   { color: #cb2431; background: #ffeef0; }
+.log-entry.warning { color: #b08800; background: #fffbdd; }
+
+/* ── Client Count Badge ─────────────────────────────────────── */
+
+#clientCount {
+    margin-top: 16px;
+    padding: 12px;
+    background: linear-gradient(135deg, rgba(102,126,234,0.08), rgba(118,75,162,0.08));
+    border-left: 4px solid #667eea;
+    border-radius: 6px;
+    font-weight: 600;
+}
+
+#uploadStatus,
+#trainingStatus,
+#coord-setup-status,
+#client-setup-status {
+    margin-top: 12px;
+    padding: 10px;
+    border-radius: 6px;
+    font-weight: 500;
+}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+    h1 { font-size: 1.8em; }
+
+    .role-card {
+        width: 100%;
+        padding: 24px 20px;
+    }
+
+    .dashboard-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .dashboard-header h1 { font-size: 1.5em; }
+
+    .status-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .form-row {
+        flex-direction: column;
+    }
+
+    #trainingLog, #clientLog {
+        height: 250px;
+    }
+}

@@ -1,0 +1,4 @@
+flask==3.0.3
+torch==2.3.0
+numpy==1.26.4
+supabase>=2.0.0

@@ -1,0 +1,249 @@
+# Net-Neutral AI — Complete Database ER Diagram
+
+> **Share this with your team** — covers both the local per-session database and the central cloud database.
+
+---
+
+## Architecture Overview
+
+```mermaid
+graph LR
+    subgraph "Per-Session (Local SQLite)"
+        DB[(database.db)]
+        CL[clients]
+        RN[rounds]
+        CR[credits]
+        DB --- CL
+        DB --- RN
+        DB --- CR
+    end
+
+    subgraph "Lifetime (Supabase Cloud)"
+        SB[(global_credits)]
+    end
+
+    CR -- "sync on session\ncomplete" --> SB
+```
+
+| Database | Engine | Location | Lifetime | Purpose |
+|----------|--------|----------|----------|---------|
+| `database.db` | SQLite | `coordinator/database.db` | Per training session (reset between runs) | Track contributions within a session |
+| `global_credits` | PostgreSQL | Supabase cloud | Permanent | Accumulate lifetime credits across all sessions |
+
+---
+
+## Local Database — `database.db`
+
+### ER Diagram
+
+```mermaid
+erDiagram
+    clients {
+        INTEGER id PK "AUTOINCREMENT"
+        TEXT client_id UK "NOT NULL, UNIQUE"
+        TEXT ip_address "DEFAULT 'unknown'"
+        DATETIME registered_at "DEFAULT CURRENT_TIMESTAMP"
+        DATETIME last_seen "DEFAULT CURRENT_TIMESTAMP"
+        BOOLEAN is_active "DEFAULT 1"
+    }
+
+    rounds {
+        INTEGER id PK "AUTOINCREMENT"
+        INTEGER round_number UK "NOT NULL, UNIQUE"
+        DATETIME started_at "NOT NULL"
+        DATETIME completed_at "DEFAULT CURRENT_TIMESTAMP"
+        INTEGER clients_submitted "DEFAULT 0"
+        REAL global_accuracy "DEFAULT 0.0"
+        REAL accuracy_delta "DEFAULT 0.0"
+    }
+
+    credits {
+        INTEGER id PK "AUTOINCREMENT"
+        TEXT client_id FK "NOT NULL"
+        INTEGER round FK "NOT NULL"
+        INTEGER samples_trained "DEFAULT 0"
+        REAL time_seconds "DEFAULT 0.0"
+        INTEGER points_earned "DEFAULT 0"
+        DATETIME timestamp "DEFAULT CURRENT_TIMESTAMP"
+    }
+
+    clients ||--o{ credits : "client_id FK, ON DELETE CASCADE"
+    rounds ||--o{ credits : "round_number FK, ON DELETE CASCADE"
+```
+
+### Relationships
+
+| Parent Table | Child Table | FK Column | Constraint | On Delete |
+|-------------|-------------|-----------|------------|-----------|
+| `clients.client_id` | `credits.client_id` | `client_id` | FOREIGN KEY | CASCADE |
+| `rounds.round_number` | `credits.round` | `round` | FOREIGN KEY | CASCADE |
+
+### Constraints
+
+| Table | Constraint | Columns | Purpose |
+|-------|-----------|---------|---------|
+| `clients` | UNIQUE | `client_id` | No duplicate client registrations |
+| `rounds` | UNIQUE | `round_number` | One record per round |
+| `credits` | UNIQUE | `(client_id, round)` | One submission per client per round |
+| All | FOREIGN KEYS ON | `PRAGMA foreign_keys = ON` | Enforced on every connection |
+
+### Indexes
+
+| Index Name | Table | Column(s) | Purpose |
+|-----------|-------|-----------|---------|
+| `idx_credits_client` | credits | `client_id` | Fast leaderboard queries |
+| `idx_credits_round` | credits | `round` | Fast per-round lookups |
+| `idx_clients_active` | clients | `is_active` | Fast active-client filtering |
+| `sqlite_autoindex_rounds_1` | rounds | `round_number` | Auto from UNIQUE |
+
+---
+
+## Cloud Database — Supabase `global_credits`
+
+### Schema
+
+```mermaid
+erDiagram
+    global_credits {
+        UUID id PK "gen_random_uuid()"
+        TEXT client_id UK "NOT NULL, UNIQUE"
+        BIGINT total_points "DEFAULT 0"
+        BIGINT total_samples "DEFAULT 0"
+        INTEGER total_rounds "DEFAULT 0"
+        TIMESTAMPTZ last_session_at "DEFAULT NOW()"
+        TIMESTAMPTZ created_at "DEFAULT NOW()"
+    }
+```
+
+### SQL Definition
+
+```sql
+CREATE TABLE global_credits (
+    id              UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+    client_id       TEXT        NOT NULL UNIQUE,
+    total_points    BIGINT      NOT NULL DEFAULT 0,
+    total_samples   BIGINT      NOT NULL DEFAULT 0,
+    total_rounds    INTEGER     NOT NULL DEFAULT 0,
+    last_session_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE global_credits ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow anonymous access" ON global_credits
+    FOR ALL USING (true) WITH CHECK (true);
+```
+
+---
+
+## Sync Mechanism
+
+```mermaid
+sequenceDiagram
+    participant C as Clients
+    participant S as Coordinator Server
+    participant LDB as Local SQLite
+    participant SDB as Supabase Cloud
+
+    Note over S: Training Session Begins
+
+    C->>S: POST /register (client_id, ip)
+    S->>LDB: INSERT INTO clients
+
+    loop For each round (1-5)
+        C->>S: POST /submit (weights, samples, time)
+        S->>LDB: INSERT INTO credits
+        S->>LDB: INSERT INTO rounds (after FedAvg)
+    end
+
+    Note over S: round_status = 'done'
+
+    S->>LDB: SELECT leaderboard (SUM points per client)
+    LDB-->>S: [{client_A: 5000pts}, {client_B: 4500pts}, ...]
+
+    S->>SDB: For each client: UPSERT global_credits
+    Note over SDB: INCREMENT total_points,<br/>total_samples, total_rounds
+
+    SDB-->>S: Sync complete (2/2 clients)
+```
+
+### Sync Rules
+
+| Scenario | Action | Example |
+|----------|--------|---------|
+| Client's **first ever** session | INSERT new row | `client_A: 5000 pts, 25000 samples, 5 rounds` |
+| Client has **existing** record | INCREMENT values | `client_A: 5000 + 4800 = 9800 pts` |
+| Supabase **not configured** | Skip (non-fatal warning) | Credits saved locally only |
+| Supabase **connection fails** | Skip (non-fatal warning) | Retry on next session |
+
+---
+
+## Complete Data Flow
+
+```mermaid
+flowchart TD
+    A[Client Starts] --> B[POST /register]
+    B --> C[INSERT INTO clients table]
+    B --> D[Add to in-memory registered_clients set]
+
+    E[Training Round N] --> F[Client trains locally]
+    F --> G[POST /submit weights + metadata]
+    G --> H[INSERT INTO credits table]
+    G --> I[Store weights in submitted_weights dict]
+
+    I --> J{All clients submitted?}
+    J -->|Yes| K[Run FedAvg Aggregation]
+    K --> L[Evaluate global model]
+    L --> M[INSERT INTO rounds table]
+    M --> N{Round N >= 5?}
+
+    N -->|No| O[Next round]
+    O --> E
+
+    N -->|Yes| P[Training Complete]
+    P --> Q[Sync to Supabase global_credits]
+    Q --> R[UPSERT per client: INCREMENT points]
+
+    style C fill:#e1f5fe
+    style H fill:#e1f5fe
+    style M fill:#e1f5fe
+    style Q fill:#fff3e0
+    style R fill:#fff3e0
+```
+
+**Blue** = Local SQLite writes | **Orange** = Supabase cloud writes
+
+---
+
+## Sample Data After 1 Session (3 clients, 5 rounds)
+
+### Local `clients` table (3 rows)
+| id | client_id | ip_address | is_active |
+|----|-----------|------------|-----------|
+| 1 | client_A | 10.0.0.100 | 1 |
+| 2 | client_B | 10.0.0.101 | 1 |
+| 3 | client_C | 10.0.0.102 | 1 |
+
+### Local `rounds` table (5 rows)
+| round_number | clients_submitted | global_accuracy | accuracy_delta |
+|-------------|-------------------|-----------------|----------------|
+| 1 | 3 | 0.714 | +0.714 |
+| 2 | 3 | 0.738 | +0.024 |
+| 3 | 3 | 0.761 | +0.023 |
+| 4 | 3 | 0.775 | +0.014 |
+| 5 | 3 | 0.782 | +0.007 |
+
+### Local `credits` table (15 rows = 3 clients x 5 rounds)
+| client_id | round | samples_trained | points_earned |
+|-----------|-------|-----------------|---------------|
+| client_A | 1 | 5000 | 1000 |
+| client_B | 1 | 5000 | 1000 |
+| client_C | 1 | 5000 | 1000 |
+| ... | ... | ... | ... |
+
+### Supabase `global_credits` (3 rows, accumulated)
+| client_id | total_points | total_samples | total_rounds | last_session_at |
+|-----------|-------------|---------------|--------------|-----------------|
+| client_A | 5000 | 25000 | 5 | 2026-06-06T... |
+| client_B | 5000 | 25000 | 5 | 2026-06-06T... |
+| client_C | 5000 | 25000 | 5 | 2026-06-06T... |

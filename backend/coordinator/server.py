@@ -301,7 +301,7 @@ def upload_dataset():
     file = request.files['file']
 
     if '..' in file.filename or '/' in file.filename or '\\' in file.filename:
-    return jsonify({'error': 'Invalid filename'}), 400
+        return jsonify({'error': 'Invalid filename'}), 400
     
     if not file.filename.endswith('.csv'):
         return jsonify({'error': 'File must be CSV format'}), 400

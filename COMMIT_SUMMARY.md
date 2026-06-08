@@ -341,3 +341,88 @@ All changes are committed to the `scope_creep` branch with full documentation. T
 **Commit**: 9109446  
 **Author**: Atharv Huilgol (Claude AI)  
 **Status**: ✅ READY FOR MERGE
+
+---
+---
+---
+
+# 🔧 PHASE 1: CRITICAL BUG FIXES (P0)
+
+## 📋 Executive Summary
+
+Five critical bugs that blocked reliable multi-round federated training have been fixed. All changes are backward compatible and verified with existing tests.
+
+**Date**: June 8, 2026  
+**Status**: ✅ All fixes implemented and tested
+
+---
+
+## 🐛 Bugs Fixed
+
+### 1.1 — Round 2+ Aggregation Blocked
+| Field | Value |
+|-------|-------|
+| **Impact** | Training appears to run but global model never updates past round 1 |
+| **Root Cause** | `check_round_completion()` returns early when `round_status == 'waiting_for_clients'` |
+| **Fix** | After round 1, transition to `active` (data already distributed) |
+| **File** | `coordinator/server.py` |
+
+### 1.2 — Shard Dataloader Mismatch
+| Field | Value |
+|-------|-------|
+| **Impact** | `client_B` / `client_C` train on empty data when using distributed CSV shards |
+| **Root Cause** | `get_client_dataloader()` slices by hardcoded `SHARD_RANGES` even with a distributed shard |
+| **Fix** | Use `get_full_dataloader()` when `local_shard_path` is set |
+| **File** | `client/client.py` |
+
+### 1.3 — Credit FK Ordering
+| Field | Value |
+|-------|-------|
+| **Impact** | SQLite FK errors on first weight submission per round |
+| **Root Cause** | `log_credit()` on `/submit` runs before `log_round()` creates the round row |
+| **Fix** | Added `ensure_round_exists()` — pre-creates round row via INSERT OR IGNORE |
+| **Files** | `coordinator/credits.py`, `coordinator/server.py` |
+
+### 1.4 — Data Shard Race Condition
+| Field | Value |
+|-------|-------|
+| **Impact** | Client crashes on first run if coordinator hasn't started training yet |
+| **Root Cause** | Client downloads shard immediately after register, before coordinator clicks Start |
+| **Fix** | Client polls `/status` until `data_distributing` or `active`, honours `WAIT_FOR_DATA_TIMEOUT_SECS` |
+| **File** | `client/client.py` |
+
+### 1.5 — Incomplete Coordinator Dependencies
+| Field | Value |
+|-------|-------|
+| **Impact** | Data upload / sharding fails on fresh install |
+| **Root Cause** | `pandas`, `scikit-learn` missing from `coordinator/requirements.txt` |
+| **Fix** | Added both packages to requirements.txt |
+| **File** | `coordinator/requirements.txt` |
+
+---
+
+## ✅ Testing Results
+
+```
+Integration Tests:  6/6 passed
+Credits Sanity:    14/14 passed
+Syntax Validation:  All modified files pass
+```
+
+---
+
+## 📁 Files Modified
+
+| File | Changes |
+|------|---------|
+| `coordinator/server.py` | Fix 1.1 (state transition), Fix 1.3 (ensure_round_exists call) |
+| `coordinator/credits.py` | Fix 1.3 (new ensure_round_exists function) |
+| `coordinator/requirements.txt` | Fix 1.5 (added pandas, scikit-learn) |
+| `client/client.py` | Fix 1.2 (full dataloader), Fix 1.4 (poll before download) |
+| `CHANGELOG.md` | Phase 1 bug fixes documentation |
+| `COMMIT_SUMMARY.md` | Updated with Phase 1 section |
+| `IMPLEMENTATION_SUMMARY.md` | Updated with Phase 1 status |
+
+---
+
+**Status**: ✅ PHASE 1 COMPLETE

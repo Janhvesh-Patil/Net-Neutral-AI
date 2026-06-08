@@ -207,6 +207,33 @@ def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
     data_shard_path = os.path.join(config.LOCAL_DATA_DIR, config.DATA_SHARD_FILENAME.format(client_id=client_id))
 
     if not os.path.exists(data_shard_path):
+        # FIX 1.4: Wait for coordinator to enter 'data_distributing' or 'active'
+        # before attempting to download the shard.  Without this, the client
+        # would crash because /get_data_shard returns 400 when distribution
+        # hasn't been triggered yet via /start_training.
+        print_status("Waiting for coordinator to start data distribution...")
+        wait_start = time.time()
+        while True:
+            try:
+                resp = requests.get(f"{config.BASE_URL}/status", timeout=5)
+                resp.raise_for_status()
+                st = resp.json().get('round_status', '')
+                if st in ('data_distributing', 'active'):
+                    print_status(f"[OK] Coordinator status: {st} — downloading shard")
+                    break
+                elapsed = int(time.time() - wait_start)
+                if elapsed > config.WAIT_FOR_DATA_TIMEOUT_SECS:
+                    raise RuntimeError(
+                        f"Timed out after {config.WAIT_FOR_DATA_TIMEOUT_SECS}s waiting "
+                        f"for data distribution. Current status: {st}"
+                    )
+                if elapsed % 10 == 0:
+                    print_status(f"Coordinator status: {st} — waiting... ({elapsed}s)")
+                time.sleep(config.POLL_INTERVAL_SECS)
+            except requests.exceptions.RequestException as e:
+                print_status(f"[WARNING] Status poll failed: {e}. Retrying...")
+                time.sleep(config.POLL_INTERVAL_SECS)
+
         print_status(f"Data shard not found locally. Downloading from coordinator...")
         try:
             download_data_shard(client_id, data_shard_path)
@@ -225,14 +252,27 @@ def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
         local_shard_path=data_shard_path
     )
 
-    dataloader = get_client_dataloader(
-        client_id=client_id,
-        train_texts=train_texts,
-        train_labels=train_labels,
-        vocab=vocab,
-        batch_size=config.BATCH_SIZE,
-        shuffle=True,
-    )
+    # FIX 1.2: When local_shard_path is used the CSV already contains only
+    # this client's data.  get_client_dataloader() would slice by the
+    # hardcoded SHARD_RANGES and return empty/wrong data for client_B/C.
+    if os.path.exists(data_shard_path):
+        from data import get_full_dataloader
+        dataloader = get_full_dataloader(
+            texts=train_texts,
+            labels=train_labels,
+            vocab=vocab,
+            batch_size=config.BATCH_SIZE,
+            shuffle=True,
+        )
+    else:
+        dataloader = get_client_dataloader(
+            client_id=client_id,
+            train_texts=train_texts,
+            train_labels=train_labels,
+            vocab=vocab,
+            batch_size=config.BATCH_SIZE,
+            shuffle=True,
+        )
 
     print_status(f"[OK] Data loaded. Shard size: {len(dataloader.dataset):,} samples")
 

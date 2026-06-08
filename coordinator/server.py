@@ -127,7 +127,10 @@ def check_round_completion():
                 print(f"[Coordinator] Cloud sync failed (non-fatal): {e}")
         else:
             current_round += 1
-            round_status = 'waiting_for_clients'
+            # FIX 1.1: After round 1, data is already distributed — go directly
+            # to 'active' so check_round_completion() doesn't return early.
+            # Only the first /start_training call uses 'data_distributing'.
+            round_status = 'active'
             round_start_time = datetime.datetime.now()
             print(f"\n[Coordinator] Ready for Round {current_round}")
 
@@ -176,6 +179,9 @@ def submit():
     
     submitted_weights[client_id] = save_path
     submitted_samples[client_id] = samples_trained
+    
+    # FIX 1.3: Ensure the round row exists before inserting credits (FK ordering)
+    credits.ensure_round_exists(current_round, round_start_time)
     
     # Log to SQLite
     points_earned = credits.log_credit(client_id, current_round, samples_trained, time_seconds)

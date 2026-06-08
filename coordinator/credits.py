@@ -339,6 +339,33 @@ def get_submitted_clients(
 # WRITE OPERATIONS
 # -----------------------------------------------------------------------------
 
+def ensure_round_exists(
+    round_number:  int,
+    started_at:    datetime.datetime,
+    db_path:       str = DB_PATH,
+) -> None:
+    """
+    FIX 1.3: Pre-create a round row if it doesn't already exist.
+
+    This must be called before the first log_credit() for a given round,
+    otherwise the FK constraint on credits(round) → rounds(round_number)
+    will raise an IntegrityError.  The row is a placeholder — log_round()
+    will UPDATE it later with the real accuracy and client count.
+    """
+    conn   = _connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT OR IGNORE INTO rounds
+            (round_number, started_at, clients_submitted, global_accuracy, accuracy_delta)
+        VALUES (?, ?, 0, 0.0, 0.0)
+        """,
+        (round_number, started_at.strftime("%Y-%m-%d %H:%M:%S")),
+    )
+    conn.commit()
+    conn.close()
+
+
 def log_credit(
     client_id:       str,
     round_num:       int,

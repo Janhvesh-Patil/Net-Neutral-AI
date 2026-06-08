@@ -1147,5 +1147,191 @@ All changes are **backward compatible**:
 
 ---
 
-**End of Changelog**
+**End of Session 2 Changelog**
 
+---
+---
+---
+
+# CHANGELOG: Phase 1 — Critical Bug Fixes (P0)
+
+**Date**: June 8, 2026  
+**Author**: Atharv Huilgol with Antigravity AI  
+**Status**: Implemented & Verified
+
+---
+
+## Overview
+
+Five critical correctness bugs were identified and fixed that blocked reliable multi-round federated training. These must land before demo recordings or merging to `main`.
+
+### Scope Summary
+- **Files Modified**: 4 existing files
+- **Breaking Changes**: None (all fixes are behavioral corrections)
+- **Tests**: 6/6 integration tests + 14/14 credits.py sanity tests passed
+
+---
+
+## Bug Fix 1.1: Round 2+ Aggregation Blocked
+
+### Problem
+After round 1 completion, `check_round_completion()` transitions `round_status` to `waiting_for_clients`. However, this status is in the early-return guard:
+```python
+if round_status in ['waiting_for_clients', 'data_distributing']:
+    return
+```
+This means FedAvg **never runs** after round 1 — the global model never updates.
+
+### Root Cause
+The state machine incorrectly reused the initial pre-training state for inter-round transitions.
+
+### Fix
+After round 1, data is already distributed. Transition directly to `active`:
+```diff
+ # coordinator/server.py — check_round_completion()
+         else:
+             current_round += 1
+-            round_status = 'waiting_for_clients'
++            round_status = 'active'
+             round_start_time = datetime.datetime.now()
+```
+
+### File: `coordinator/server.py`
+
+---
+
+## Bug Fix 1.2: Shard Dataloader Mismatch
+
+### Problem
+`get_client_dataloader()` slices `train_texts` by hardcoded `SHARD_RANGES` (e.g., `client_B: rows 5000–9999`). When a distributed CSV shard is loaded via `local_shard_path`, the shard CSV only contains ~100–5000 rows total. Index-slicing by the original ranges produces **empty or wrong data** for `client_B` and `client_C`.
+
+### Root Cause
+The dataloader factory assumed data was always the full 15K-row IMDb training set.
+
+### Fix
+When `local_shard_path` exists, use `get_full_dataloader()` (which uses all rows without slicing):
+```diff
+ # client/client.py — run_client()
+-    dataloader = get_client_dataloader(...)
++    if os.path.exists(data_shard_path):
++        from data import get_full_dataloader
++        dataloader = get_full_dataloader(texts=..., labels=..., vocab=...)
++    else:
++        dataloader = get_client_dataloader(...)
+```
+
+### Files: `client/client.py`
+
+---
+
+## Bug Fix 1.3: Credit FK Ordering
+
+### Problem
+On `/submit`, `log_credit()` executes **before** `log_round()`. The `credits` table has:
+```sql
+FOREIGN KEY (round) REFERENCES rounds(round_number) ON DELETE CASCADE
+```
+If no `rounds` row exists for the current round, inserting a credit raises `sqlite3.IntegrityError`.
+
+### Root Cause
+`log_round()` is called inside `check_round_completion()` after all clients submit, but `log_credit()` is called per-client on each `/submit`.
+
+### Fix
+Added `ensure_round_exists()` that pre-creates a placeholder round row (via `INSERT OR IGNORE`) before the first credit insertion. `log_round()` later updates this row with real accuracy data (via `INSERT OR REPLACE`).
+
+```python
+# coordinator/credits.py — NEW
+def ensure_round_exists(round_number, started_at, db_path=DB_PATH):
+    """Pre-create round row to satisfy FK constraint."""
+    cursor.execute(
+        "INSERT OR IGNORE INTO rounds (round_number, started_at, ...) VALUES (?, ?, 0, 0.0, 0.0)",
+        (round_number, started_at.strftime(...)),
+    )
+```
+
+```diff
+ # coordinator/server.py — submit()
++    credits.ensure_round_exists(current_round, round_start_time)
+     points_earned = credits.log_credit(...)
+```
+
+### Files: `coordinator/credits.py`, `coordinator/server.py`
+
+---
+
+## Bug Fix 1.4: Data Shard Race Condition
+
+### Problem
+After registering, the client immediately calls `download_data_shard()`. If the coordinator hasn't clicked "Start Training" yet, `/get_data_shard` returns **400 error** ("Data distribution not active"), crashing the client.
+
+### Root Cause
+No synchronization between client startup and coordinator's training-start action.
+
+### Fix
+Client now polls `/status` in a loop until `round_status` is `data_distributing` or `active`, with a configurable timeout (`WAIT_FOR_DATA_TIMEOUT_SECS = 300`):
+
+```python
+# client/client.py — run_client()
+while True:
+    st = requests.get(f"{config.BASE_URL}/status").json().get('round_status')
+    if st in ('data_distributing', 'active'):
+        break
+    if elapsed > config.WAIT_FOR_DATA_TIMEOUT_SECS:
+        raise RuntimeError("Timed out waiting for data distribution")
+    time.sleep(config.POLL_INTERVAL_SECS)
+```
+
+### File: `client/client.py`
+
+---
+
+## Bug Fix 1.5: Incomplete Coordinator Dependencies
+
+### Problem
+`pandas` and `scikit-learn` are required by `coordinator/data_distributor.py` but were missing from `coordinator/requirements.txt`. Data upload and sharding fail on fresh installs.
+
+### Fix
+```diff
+ # coordinator/requirements.txt
+  flask==3.0.3
+  torch==2.3.0
+  numpy==1.26.4
+  supabase>=2.0.0
++ pandas>=1.3.0
++ scikit-learn>=0.24.0
+```
+
+### File: `coordinator/requirements.txt`
+
+---
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| `python integration_test.py` | 6/6 passed |
+| `python coordinator/credits.py` | 14/14 passed |
+| Python syntax validation (all modified files) | All passed |
+| Fix 1.1: Round status after aggregation | `active` (not `waiting_for_clients`) |
+| Fix 1.2: Shard dataloader for local CSV | Uses `get_full_dataloader()` |
+| Fix 1.3: Credit insertion before round | No FK error (round pre-created) |
+| Fix 1.4: Client waits for data distribution | Polls until `data_distributing` |
+| Fix 1.5: Fresh install dependencies | `pandas`, `scikit-learn` in requirements |
+
+---
+
+## Updated State Machine
+
+```
+[waiting_for_clients] → [data_distributing] → [active] → [aggregating] → [active] → ...
+                                                  ↑                          ↓
+                                                  └──────────────────────────┘
+                                              (rounds 2+ skip data_distributing)
+                                                           ...
+                                              → [aggregating] → [done]
+                                              (final round)
+```
+
+---
+
+**End of Phase 1 Changelog**

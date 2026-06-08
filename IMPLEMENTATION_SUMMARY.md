@@ -132,3 +132,36 @@ supabase>=2.0.0
 pandas>=1.3.0
 scikit-learn>=0.24.0
 ```
+
+---
+
+## Phase 1 Bug Fixes (June 8, 2026)
+
+Five critical correctness bugs have been fixed:
+
+| # | Bug | Fix | Files |
+|---|-----|-----|-------|
+| 1.1 | Round 2+ aggregation blocked | Transition to `active` after round 1 (not `waiting_for_clients`) | `coordinator/server.py` |
+| 1.2 | Shard dataloader mismatch | Use `get_full_dataloader()` when `local_shard_path` is set | `client/client.py` |
+| 1.3 | Credit FK ordering | New `ensure_round_exists()` pre-creates round row before credits | `coordinator/credits.py`, `coordinator/server.py` |
+| 1.4 | Data shard race condition | Client polls `/status` until `data_distributing`/`active` before download | `client/client.py` |
+| 1.5 | Missing coordinator deps | Added `pandas>=1.3.0`, `scikit-learn>=0.24.0` to requirements.txt | `coordinator/requirements.txt` |
+
+### Updated State Machine
+
+```
+[waiting_for_clients] → [data_distributing] → [active] ⇄ [aggregating]
+                                                              ↓
+                                                           [done]
+```
+After round 1, subsequent rounds transition directly to `active` (data already distributed).
+
+### New Function: `credits.ensure_round_exists()`
+
+Pre-creates a placeholder round row via `INSERT OR IGNORE` to satisfy the FK constraint on `credits(round) → rounds(round_number)`. Called on each `/submit` before `log_credit()`.
+
+### Verification
+
+- Integration tests: 6/6 passed
+- Credits sanity tests: 14/14 passed
+- All modified files pass syntax validation

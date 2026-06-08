@@ -11,7 +11,7 @@
 ```
                     +---------------------------+
                     |   Coordinator (Flask)     |
-                    |   coordinator/server.py   |
+                    |        server.py          |
                     |                           |
                     |  +--------+  +---------+  |         +------------------+
                     |  | FedAvg |  | Credits |  | ------> | Supabase Cloud   |
@@ -30,7 +30,7 @@
 
 ## Databases
 
-### Local SQLite (`coordinator/database.db`)
+### Local SQLite (`backend/coordinator/database.db`)
 - **clients** table: Registered clients with IP, status
 - **rounds** table: Round metadata with accuracy tracking
 - **credits** table: Per-client per-round contribution credits
@@ -82,18 +82,18 @@
 
 | File | Purpose |
 |------|---------|
-| `coordinator/server.py` | Flask server, API endpoints, state machine |
-| `coordinator/credits.py` | SQLite database operations, leaderboard |
-| `coordinator/supabase_sync.py` | Cloud credit sync to Supabase |
-| `coordinator/fedavg.py` | Federated averaging algorithm |
-| `coordinator/evaluate.py` | Model evaluation |
-| `coordinator/data_distributor.py` | Dataset splitting for clients |
-| `client/client.py` | Client training loop |
-| `client/model.py` | Transformer classifier model |
-| `client/train.py` | Local training logic |
-| `client/data.py` | Data loading (supports CSV shards) |
-| `shared/config.py` | All configuration parameters |
-| `shared/ip_utils.py` | IP address auto-discovery |
+| `backend/coordinator/server.py` | Flask server, API endpoints, state machine |
+| `backend/coordinator/credits.py` | SQLite database operations, leaderboard |
+| `backend/coordinator/supabase_sync.py` | Cloud credit sync to Supabase |
+| `backend/coordinator/fedavg.py` | Federated averaging algorithm |
+| `backend/coordinator/evaluate.py` | Model evaluation |
+| `backend/coordinator/data_distributor.py` | Dataset splitting for clients |
+| `backend/client/client.py` | Client training loop |
+| `backend/client/model.py` | Transformer classifier model |
+| `backend/client/train.py` | Local training logic |
+| `backend/client/data.py` | Data loading (supports CSV shards) |
+| `backend/shared/config.py` | All configuration parameters |
+| `backend/shared/ip_utils.py` | IP address auto-discovery |
 | `frontend/index.html` | Web UI with role selection |
 | `frontend/styles.css` | Styling (purple gradient theme) |
 | `frontend/app.js` | Frontend logic + API integration |
@@ -104,7 +104,7 @@
 
 ```bash
 # 1. Start coordinator
-python coordinator/server.py
+python backend/coordinator/server.py
 
 # 2. Open browser
 #    http://localhost:5000/
@@ -113,9 +113,9 @@ python coordinator/server.py
 #    → Upload dataset CSV
 
 # 3. Start clients (in separate terminals)
-python client/client.py --client_id client_A
-python client/client.py --client_id client_B
-python client/client.py --client_id client_C
+python backend/client/client.py --client_id client_A
+python backend/client/client.py --client_id client_B
+python backend/client/client.py --client_id client_C
 
 # 4. Click "Start Training" in the dashboard
 ```

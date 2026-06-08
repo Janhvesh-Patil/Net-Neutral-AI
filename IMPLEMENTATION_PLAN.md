@@ -18,17 +18,17 @@ These must land before demo recordings or merging to `main`.
 
 | # | Issue | Impact | Proposed fix | Files |
 |---|-------|--------|--------------|-------|
-| 1.1 | **Round 2+ aggregation blocked** — `check_round_completion()` returns early when `round_status == 'waiting_for_clients'`, so FedAvg never runs after round 1 | Training appears to run but global model never updates past round 1 | After round 1, transition to `active` (skip re-distribution). Only use `data_distributing` on first `/start_training` | `coordinator/server.py` |
-| 1.2 | **Shard dataloader mismatch** — `get_client_dataloader()` slices by hardcoded `SHARD_RANGES` even when a distributed CSV shard is loaded | `client_B` / `client_C` may train on empty data | If `local_shard_path` is set, use `get_full_dataloader()` instead of index slicing | `client/client.py`, `client/data.py` |
-| 1.3 | **Credit FK ordering** — `log_credit()` on `/submit` runs before `log_round()` creates the round row | SQLite FK errors on first submission per round | Call `ensure_round_exists(round_num)` at round start or before first `log_credit` | `coordinator/credits.py`, `coordinator/server.py` |
-| 1.4 | **Data shard race** — clients download shard immediately after register, before coordinator clicks Start Training | Client crashes on first run | Poll `/status` until `data_distributing` or `active`, honour `WAIT_FOR_DATA_TIMEOUT_SECS` | `client/client.py` |
+| 1.1 | **Round 2+ aggregation blocked** — `check_round_completion()` returns early when `round_status == 'waiting_for_clients'`, so FedAvg never runs after round 1 | Training appears to run but global model never updates past round 1 | After round 1, transition to `active` (skip re-distribution). Only use `data_distributing` on first `/start_training` | `backend/coordinator/server.py` |
+| 1.2 | **Shard dataloader mismatch** — `get_client_dataloader()` slices by hardcoded `SHARD_RANGES` even when a distributed CSV shard is loaded | `client_B` / `client_C` may train on empty data | If `local_shard_path` is set, use `get_full_dataloader()` instead of index slicing | `backend/client/client.py`, `backend/client/data.py` |
+| 1.3 | **Credit FK ordering** — `log_credit()` on `/submit` runs before `log_round()` creates the round row | SQLite FK errors on first submission per round | Call `ensure_round_exists(round_num)` at round start or before first `log_credit` | `backend/coordinator/credits.py`, `backend/coordinator/server.py` |
+| 1.4 | **Data shard race** — clients download shard immediately after register, before coordinator clicks Start Training | Client crashes on first run | Poll `/status` until `data_distributing` or `active`, honour `WAIT_FOR_DATA_TIMEOUT_SECS` | `backend/client/client.py` |
 | 1.5 | **Incomplete coordinator deps** — `pandas`, `scikit-learn` missing from `requirements.txt` | Data upload / sharding fails on fresh install | Add to `coordinator/requirements.txt` | `coordinator/requirements.txt` |
 
 **Acceptance criteria (Phase 1):**
 - [x] Full 5-round session completes with improving or stable global accuracy
 - [x] All 3 clients train on non-empty shards from uploaded CSV
 - [x] Credits logged for every round without FK errors
-- [x] Fresh `pip install -r coordinator/requirements.txt` supports dataset upload
+- [x] Fresh `pip install -r requirements.txt` supports dataset upload
 
 **Estimated effort:** 1–2 days  
 **Status:** ✅ Complete (June 8, 2026)
@@ -63,8 +63,8 @@ A WiFi network may host multiple independent training sessions (multiple coordin
 
 | Component | Purpose |
 |-----------|---------|
-| `coordinator/session_registry.py` | Register session, heartbeat, list/deregister via Supabase |
-| `coordinator/lan_scan.py` | Probe subnet for coordinators (`/api/session_info`) |
+| `backend/coordinator/session_registry.py` | Register session, heartbeat, list/deregister via Supabase |
+| `backend/coordinator/lan_scan.py` | Probe subnet for coordinators (`/api/session_info`) |
 | `GET /api/session_info` | This coordinator's live session metadata |
 | `GET /api/lobby` | Merged session list (Supabase + optional `?subnet=192.168.1`) |
 | `GET /api/public_config` | Discovery settings for frontend |
@@ -106,10 +106,10 @@ CREATE POLICY "Allow anonymous access" ON active_sessions
 
 ```bash
 # List sessions on the LAN
-python client/client.py --list_sessions --discovery_host 192.168.1.10:5000 --subnet 192.168.1
+python client.py --list_sessions --discovery_host 192.168.1.10:5000 --subnet 192.168.1
 
 # Join a specific coordinator
-python client/client.py --client_id client_A --coordinator_url http://192.168.1.10:5000
+python client.py --client_id client_A --coordinator_url http://192.168.1.10:5000
 ```
 
 ### Acceptance criteria (Phase 2)
@@ -175,9 +175,9 @@ Phase 4.1 (scale)  →  merge to main  →  Phase 5 as roadmap
 
 | Setting | Location | Default | Purpose |
 |---------|----------|---------|---------|
-| `SESSION_HEARTBEAT_SECS` | `shared/config.py` | `10` | Registry heartbeat interval |
-| `SESSION_STALE_SECS` | `shared/config.py` | `45` | Hide sessions older than this |
-| `DISCOVERY_PORT` | `shared/config.py` | `5000` | Port for LAN scan |
+| `SESSION_HEARTBEAT_SECS` | `config.py` | `10` | Registry heartbeat interval |
+| `SESSION_STALE_SECS` | `config.py` | `45` | Hide sessions older than this |
+| `DISCOVERY_PORT` | `config.py` | `5000` | Port for LAN scan |
 | `SUPABASE_URL` / `SUPABASE_KEY` | env | empty | Cloud registry + credits |
 | `--coordinator_url` | `client.py` CLI | from config | Override coordinator target |
 | `--list_sessions` | `client.py` CLI | off | Print lobby and exit |
@@ -188,7 +188,7 @@ Phase 4.1 (scale)  →  merge to main  →  Phase 5 as roadmap
 ## Testing checklist (before merge)
 
 - [ ] `python integration_test.py` — 6/6 pass
-- [ ] `python coordinator/credits.py` — sanity tests pass
+- [ ] `python backend/coordinator/credits.py` — sanity tests pass
 - [ ] Two coordinators + lobby refresh shows both
 - [ ] Client joins correct session; training completes 5 rounds (after Phase 1 fixes)
 - [ ] Supabase sync still runs on session complete

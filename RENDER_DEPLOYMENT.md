@@ -13,8 +13,8 @@ Use the following settings when creating a new **Web Service** on Render:
 | **Repository** | `https://github.com/Janhvesh-Patil/Net-Neutral-AI` |
 | **Branch** | `scope_creep_update_070626` |
 | **Runtime** | `Python` |
-| **Build Command** | `pip install -r coordinator/requirements.txt` |
-| **Start Command** | `python coordinator/server.py` |
+| **Build Command** | `pip install -r backend/coordinator/requirements.txt` |
+| **Start Command** | `python backend/coordinator/server.py` |
 
 ---
 
@@ -35,7 +35,7 @@ Configure these variables in the **Environment** tab of your Render Web Service 
 
 ## 💾 SQLite Database & Ephemeral Storage on Render
 
-Because Render Web Services use an ephemeral filesystem, the local SQLite database (`coordinator/database.db`) and uploaded datasets will be reset whenever the service restarts, redeploys, or goes to sleep (on the free tier).
+Because Render Web Services use an ephemeral filesystem, the local SQLite database (`backend/coordinator/database.db`) and uploaded datasets will be reset whenever the service restarts, redeploys, or goes to sleep (on the free tier).
 
 * **Cloud Persistence**: Enabling Supabase sync (using the environment variables above) ensures that lifetime client credits are safely backed up to the cloud at the completion of a training session.
 * **Persistent Disk**: If you require database and checkpoint persistence across restarts without losing local session histories, attach a **Persistent Disk** on Render (available on paid tiers) and mount it.
@@ -57,17 +57,17 @@ To connect local training client nodes to the cloud coordinator on Render, pass 
 ### Command Prompt (Windows CMD)
 ```cmd
 set COORDINATOR_BASE_URL=https://your-app-name.onrender.com
-python client/client.py --client_id client_A
+python client.py --client_id client_A
 ```
 
 ### PowerShell (Windows)
 ```powershell
 $env:COORDINATOR_BASE_URL="https://your-app-name.onrender.com"
-python client/client.py --client_id client_A
+python client.py --client_id client_A
 ```
 
 ### Bash (Linux / macOS / Git Bash)
 ```bash
 export COORDINATOR_BASE_URL="https://your-app-name.onrender.com"
-python client/client.py --client_id client_A
+python client.py --client_id client_A
 ```

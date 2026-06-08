@@ -92,7 +92,7 @@ Baseline checkpoint — pre-trained on 15,000 samples for 5 epochs on GPU:
 | 5 | **80.95%** | +0.10% |
 
 *Federated round results will be updated after demo recording.*
-*See `coordinator/pretrain_log.json` for full training metadata.*
+*See `pretrain_log.json` for full training metadata.*
 
 ---
 

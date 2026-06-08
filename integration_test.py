@@ -13,8 +13,9 @@ import pandas as pd
 # Add project paths
 project_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, project_root)
-sys.path.insert(0, os.path.join(project_root, 'coordinator'))
-sys.path.insert(0, os.path.join(project_root, 'client'))
+sys.path.insert(0, os.path.join(project_root, 'backend'))
+sys.path.insert(0, os.path.join(project_root, 'backend', 'coordinator'))
+sys.path.insert(0, os.path.join(project_root, 'backend', 'client'))
 
 # Import modules
 from shared import config, ip_utils
@@ -110,14 +111,14 @@ def test_file_structure():
     print("=" * 60)
 
     required_files = {
-        'coordinator/server.py': 'Coordinator server',
-        'coordinator/data_distributor.py': 'Data distributor',
-        'coordinator/fedavg.py': 'FedAvg aggregation',
-        'client/client.py': 'Client trainer',
-        'client/data.py': 'Data loader',
-        'client/model.py': 'Transformer model',
-        'shared/config.py': 'Configuration',
-        'shared/ip_utils.py': 'IP utilities',
+        'backend/coordinator/server.py': 'Coordinator server',
+        'backend/coordinator/data_distributor.py': 'Data distributor',
+        'backend/coordinator/fedavg.py': 'FedAvg aggregation',
+        'backend/client/client.py': 'Client trainer',
+        'backend/client/data.py': 'Data loader',
+        'backend/client/model.py': 'Transformer model',
+        'backend/shared/config.py': 'Configuration',
+        'backend/shared/ip_utils.py': 'IP utilities',
         'frontend/index.html': 'Frontend HTML',
         'frontend/styles.css': 'Frontend CSS',
         'frontend/app.js': 'Frontend JavaScript',
@@ -167,12 +168,12 @@ def test_syntax_check():
     print("=" * 60)
 
     python_files = [
-        'coordinator/server.py',
-        'coordinator/data_distributor.py',
-        'client/client.py',
-        'client/data.py',
-        'shared/config.py',
-        'shared/ip_utils.py',
+        'backend/coordinator/server.py',
+        'backend/coordinator/data_distributor.py',
+        'backend/client/client.py',
+        'backend/client/data.py',
+        'backend/shared/config.py',
+        'backend/shared/ip_utils.py',
     ]
 
     import py_compile
@@ -236,10 +237,10 @@ def run_all_tests():
         print("\n  [SUCCESS] All integration tests PASSED!")
         print("  System is ready for deployment.")
         print("\n  NEXT STEPS:")
-        print("  1. Start coordinator: python coordinator/server.py")
+        print("  1. Start coordinator: python backend/coordinator/server.py")
         print("  2. Open frontend: http://localhost:5000/")
         print("  3. Upload dataset (CSV with 'review' and 'label' columns)")
-        print("  4. Start 3+ clients: python client/client.py --client_id client_A/B/C")
+        print("  4. Start 3+ clients: python client.py --client_id client_A/B/C")
         print("  5. Click 'Start Training' in frontend")
         return True
     else:

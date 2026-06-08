@@ -20,14 +20,14 @@ env/
 *.iml
 
 # ── Coordinator runtime files ─────────────────────────────────────────────────
-coordinator/database.db
-coordinator/temp_*.pt
-coordinator/uploaded_dataset.csv
+backend/coordinator/database.db
+backend/coordinator/temp_*.pt
+backend/coordinator/uploaded_dataset.csv
 
 # ── Client runtime files ───────────────────────────────────────────────────────
-client/temp_*.pt
-client/local_data/
-local_data/
+backend/client/temp_*.pt
+backend/client/local_data/
+backend/local_data/
 
 # ── Temp weight files from clients ───────────────────────────────────────────
 *.pt.tmp

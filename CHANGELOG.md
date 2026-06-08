@@ -684,7 +684,7 @@ pip install pandas scikit-learn
 
 ### BEFORE (Manual)
 ```
-Terminal 1: python coordinator/server.py
+Terminal 1: python backend/coordinator/server.py
 Terminal 2-4: python client/client.py --client_id client_A/B/C
              (All clients load same hardcoded data)
 

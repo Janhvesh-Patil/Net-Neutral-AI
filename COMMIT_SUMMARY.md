@@ -33,8 +33,8 @@ All changes have been successfully committed to the `scope_creep` branch with co
 ## 📁 What's in the Commit
 
 ### Backend Modules (2 new)
-- ✅ `shared/ip_utils.py` - IP discovery (61 LOC)
-- ✅ `coordinator/data_distributor.py` - Data distribution (239 LOC)
+- ✅ `backend/shared/ip_utils.py` - IP discovery (61 LOC)
+- ✅ `backend/coordinator/data_distributor.py` - Data distribution (239 LOC)
 
 ### Frontend Dashboard (3 new)
 - ✅ `frontend/index.html` - Control panel UI (71 LOC)
@@ -47,12 +47,12 @@ All changes have been successfully committed to the `scope_creep` branch with co
 - ✅ `IMPLEMENTATION_SUMMARY.md` - Complete overview (298 LOC)
 
 ### Enhanced Existing Files (6)
-- ✅ `coordinator/server.py` - 6 new endpoints + state machine
-- ✅ `client/client.py` - IP reporting + data download + caching
-- ✅ `client/data.py` - Local shard loading
-- ✅ `shared/config.py` - 3 new settings
+- ✅ `backend/coordinator/server.py` - 6 new endpoints + state machine
+- ✅ `backend/client/client.py` - IP reporting + data download + caching
+- ✅ `backend/client/data.py` - Local shard loading
+- ✅ `backend/shared/config.py` - 3 new settings
 - ✅ `.gitignore` - Runtime file exclusions
-- ✅ `client/__pycache__/data.cpython-313.pyc` - Updated
+- ✅ `backend/client/__pycache__/data.cpython-313.pyc` - Updated
 
 ---
 
@@ -87,7 +87,7 @@ Live Status Log (Training progress in real-time)
 - **Round 1**: Download data shard (~50-100 MB)
 - **Round 2-5**: Use cached data (skip download)
 - **Benefit**: 10x faster startup on subsequent rounds
-- **Storage**: `local_data/client_X_data.csv`
+- **Storage**: `backend/local_data/client_X_data.csv`
 
 ### 5. Enhanced Architecture
 - New state: `waiting_for_clients` (initial)
@@ -140,11 +140,11 @@ All integration tests PASSED (6/6):
 
 ### BEFORE
 ```
-Terminal 1: python coordinator/server.py
-Terminal 2-4: python client/client.py --client_id client_A/B/C
+Terminal 1: python backend/coordinator/server.py
+Terminal 2-4: python backend/client/client.py --client_id client_A/B/C
 
 Data: Hardcoded shards (client_A: rows 0-4999, etc.)
-IP: Manual config in shared/config.py
+IP: Manual config in config.py
 Cache: None
 UI: Terminal logs only
 ```
@@ -223,15 +223,15 @@ pip install pandas scikit-learn
 ### Quick Start
 ```bash
 # Terminal 1: Start coordinator
-python coordinator/server.py
+python backend/coordinator/server.py
 
 # Browser: Open dashboard
 http://localhost:5000/
 
 # Terminal 2-4: Start clients
-python client/client.py --client_id client_A
-python client/client.py --client_id client_B
-python client/client.py --client_id client_C
+python backend/client/client.py --client_id client_A
+python backend/client/client.py --client_id client_B
+python backend/client/client.py --client_id client_C
 
 # Browser: Upload dataset & click "Start Training"
 ```

@@ -5,9 +5,12 @@ Example: 192.168.1.42
 """
 
 # ── Network ───────────────────────────────────────────────────────────────────
-COORDINATOR_IP = 'IP_ADDRESS_OF_COORDINATOR'
-COORDINATOR_PORT = 5000
-BASE_URL         = f"http://{COORDINATOR_IP}:{COORDINATOR_PORT}"
+import os
+COORDINATOR_IP = os.environ.get('COORDINATOR_IP', 'IP_ADDRESS_OF_COORDINATOR')
+COORDINATOR_PORT = int(os.environ.get('COORDINATOR_PORT', 5000))
+BASE_URL = os.environ.get('COORDINATOR_BASE_URL')
+if not BASE_URL:
+    BASE_URL = f"http://{COORDINATOR_IP}:{COORDINATOR_PORT}"
 
 # ── Training ──────────────────────────────────────────────────────────────────
 TOTAL_ROUNDS  = 5

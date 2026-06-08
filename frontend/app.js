@@ -4,7 +4,7 @@
    ============================================================ */
 
 // ── Global State ────────────────────────────────────────────────
-let coordinatorURL = "http://localhost:5000";
+let coordinatorURL = window.location.origin;
 let currentRole = null;          // 'coordinator' or 'client'
 let clientName = null;           // e.g. 'client_A'
 let expectedClients = 3;
@@ -45,13 +45,15 @@ function launchCoordinator() {
     const port = document.getElementById('coord-port').value.trim();
     expectedClients = parseInt(document.getElementById('coord-clients').value);
 
-    if (!ip || !port) {
-        showStatus('coord-setup-status', 'Please enter IP and port', 'error');
-        return;
+    if (!ip) {
+        coordinatorURL = window.location.origin;
+    } else if (ip.includes('://')) {
+        coordinatorURL = ip;
+    } else {
+        coordinatorURL = `http://${ip}${port ? ':' + port : ''}`;
     }
 
-    coordinatorURL = `http://${ip}:${port}`;
-    document.getElementById('coord-url-badge').textContent = `${ip}:${port}`;
+    document.getElementById('coord-url-badge').textContent = coordinatorURL.replace(/^https?:\/\//, '');
 
     showScreen('screen-coordinator-dashboard');
     logMessage('trainingLog', `[INFO] Coordinator dashboard loaded`, 'info');
@@ -72,11 +74,12 @@ async function connectAsClient() {
     clientName = document.getElementById('client-name').value;
 
     if (!ip) {
-        showStatus('client-setup-status', 'Please enter coordinator IP', 'error');
-        return;
+        coordinatorURL = window.location.origin;
+    } else if (ip.includes('://')) {
+        coordinatorURL = ip;
+    } else {
+        coordinatorURL = `http://${ip}${port ? ':' + port : ''}`;
     }
-
-    coordinatorURL = `http://${ip}:${port || 5000}`;
 
     showStatus('client-setup-status', 'Connecting...', 'pending');
 

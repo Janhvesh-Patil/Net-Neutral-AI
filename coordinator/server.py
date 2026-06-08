@@ -394,7 +394,8 @@ if __name__ == '__main__':
         # Create a tiny dummy state dict
         torch.save({"dummy": torch.tensor([1.0])}, MODEL_PATH)
 
-    # CRITICAL DEMO-SAVER: host='0.0.0.0' binds to the WiFi adapter.
+    # Bind to PORT environment variable if available (e.g. on Render), default to 5000
+    port = int(os.environ.get("PORT", 5000))
     print("[Coordinator] Starting Net-Neutral AI Coordinator...")
-    print("[Coordinator] Server running on 0.0.0.0:5000")
-    app.run(host='0.0.0.0', port=5000)
+    print(f"[Coordinator] Server running on 0.0.0.0:{port}")
+    app.run(host='0.0.0.0', port=port)

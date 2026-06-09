@@ -370,7 +370,9 @@
              ondragleave="onDragLeave(event)" onclick="document.getElementById('dataset-file').click()">
           <div class="drop-icon">📄</div>
           <p class="drop-label">Drop CSV here or click to browse</p>
-          <p class="drop-hint mono" id="dataset-hint">No file selected</p>
+          <p class="drop-hint mono" id="dataset-hint" style="color:var(--text);margin-top:4px">
+            ⚠️ MANDATORY: CSV must contain 'review' and 'label' columns
+          </p>
           <input type="file" id="dataset-file" accept=".csv" style="display:none"
                  onchange="onFileSelect(event,'dataset')">
         </div>

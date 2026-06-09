@@ -90,13 +90,13 @@ To do a real-world test connecting a local machine to your newly deployed cloud 
    - On your Render website, go to the **Coordinator Setup** screen. 
    - Change the "Expected Clients" input to `1` (since you're doing a single-client test).
    - Click **Launch Coordinator Dashboard**. The server is now actively waiting for 1 client to join.
-2. **Upload Dataset**: On the resulting Dashboard screen, click the **Upload Dataset** button. Upload a dummy `.csv` file (it needs to contain a `review` column and a `label` column).
+2. **Upload Dataset**: On the resulting Dashboard screen, click the **Upload Dataset** button. Upload a `.csv` file. **Note:** The CSV must strictly contain a `review` column (text) and a `label` column (0 or 1) for the model to process it.
 3. **Start the Local Client**:
    - On the machine you want to use as a client, open a terminal/command prompt.
    - Clone your repo and navigate to `backend/client`.
    - Install dependencies if you haven't: `pip install -r requirements.txt`.
    - Run the client command pointing to your Render URL:
-     \`\`\`bash
+     ```bash
      python client.py --client_id my_test_client --coordinator_url https://your-app-name.onrender.com
      \`\`\`
 4. **Begin Training**:

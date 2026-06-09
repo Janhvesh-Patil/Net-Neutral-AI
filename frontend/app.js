@@ -922,27 +922,40 @@ function buildResultsChart() {
 
 async function downloadModel() {
   /*
-   * Prefer the active job endpoint when available.
-   * Clients often do not have S.jobId locally, so we try to resolve it
-   * from the coordinator before falling back to the legacy endpoint.
+   * INTEGRATION (TRD v2.1): GET /jobs/{job_id}/model → .pt binary
+   * Current: no download endpoint yet — model lives at ./global_model.pt
+   * on coordinator server. Implement a simple /download_model endpoint
+   * in Flask that sends the file:
+   *   @app.route('/download_model')
+   *   def download_model():
+   *       return send_file('global_model.pt', as_attachment=True)
    */
-  let jobId = S.jobId;
+  const btn = document.querySelector('button[onclick="downloadModel()"]');
+  const originalText = btn ? btn.textContent : '⬇ Model (.pt)';
+  if (btn) btn.textContent = 'Downloading...';
 
-  if (!jobId) {
-    try {
-      const info = await api('/api/model');
-      jobId = info.job_id || info.active_job_id || info.current_job_id || info.jobId || null;
-      if (jobId) S.jobId = jobId;
-    } catch (e) {
-      // Ignore and fall back to the legacy download path below.
+  try {
+    const path = S.jobId ? `/jobs/${S.jobId}/model` : '/download_model';
+    const res = await api(path);
+    
+    // The api wrapper returns the Response object if it's not JSON
+    if (!(res instanceof Response)) {
+      throw new Error('Received unexpected data format from the coordinator.');
     }
+
+    const blob = await res.blob();
+    const a = Object.assign(document.createElement('a'), {
+      href: URL.createObjectURL(blob),
+      download: `model_${S.jobId || 'global'}.pt`,
+    });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 100);
+  } catch (e) {
+    console.error('Download failed:', e);
+    alert('Failed to download model: ' + e.message);
+  } finally {
+    if (btn) btn.textContent = originalText;
   }
-
-  const path = jobId
-    ? `/jobs/${encodeURIComponent(jobId)}/model`
-    : '/download_model';
-
-  window.location.href = S.coordURL + path;
 }
 
 function downloadReport() {

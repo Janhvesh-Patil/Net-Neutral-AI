@@ -35,27 +35,27 @@
 
 // ── GLOBAL STATE ─────────────────────────────────────────────────
 const S = {
-  coordURL:        "https://net-neutral-ai.onrender.com:5000", // Set on coordinator setup
-  role:            null,                   // 'coordinator' | 'client'
-  clientId:        null,                   // e.g. 'client_A'
-  sessionName:     '',
+  coordURL: window.location.origin, // Set on coordinator setup
+  role: null,                   // 'coordinator' | 'client'
+  clientId: null,                   // e.g. 'client_A'
+  sessionName: '',
   expectedClients: 3,
-  jobId:           null,                   // TRD v2.1: active job_id
+  jobId: null,                   // TRD v2.1: active job_id
   accuracyHistory: [],                     // [{round, acc}] for charts
   selectedSession: null,                   // Session picked from lobby
-  signupRole:      null,                   // Role chosen during sign-up
-  datasetFile:     null,
-  checkpointFile:  null,
+  signupRole: null,                   // Role chosen during sign-up
+  datasetFile: null,
+  checkpointFile: null,
 
-  pollCoord:       null,                   // Coordinator polling handle
-  pollClient:      null,                   // Client polling handle
+  pollCoord: null,                   // Coordinator polling handle
+  pollClient: null,                   // Client polling handle
 
   // Supabase session — TRD v2.1
   // sbSession: null,
 };
 
 // Chart.js instances
-let accChart     = null;
+let accChart = null;
 let resultsChart = null;
 
 // Canvas network graph instance
@@ -73,10 +73,10 @@ function showScreen(id) {
   if (el) el.classList.add('active');
 
   // Per-screen init hooks
-  if (id === 'screen-landing')       loadStats();
-  if (id === 'screen-leaderboard')   loadLeaderboard();
+  if (id === 'screen-landing') loadStats();
+  if (id === 'screen-leaderboard') loadLeaderboard();
   if (id === 'screen-live-training') initLiveView();
-  if (id === 'screen-agent-setup')   selectOS('windows');
+  if (id === 'screen-agent-setup') selectOS('windows');
 }
 
 function selectRoleAndGo(role) {
@@ -114,7 +114,7 @@ function stopAllPolling() {
  *   if (session) headers['Authorization'] = `Bearer ${session.access_token}`;
  */
 async function api(path, opts = {}) {
-  const url  = S.coordURL + path;
+  const url = S.coordURL + path;
   const hdrs = { ...(opts.headers || {}) };
 
   // TODO (TRD v2.1): uncomment when Supabase is configured
@@ -128,7 +128,7 @@ async function api(path, opts = {}) {
   const res = await fetch(url, { ...opts, headers: hdrs });
   if (!res.ok) {
     let msg = res.statusText;
-    try { const d = await res.clone().json(); msg = d.error || msg; } catch {}
+    try { const d = await res.clone().json(); msg = d.error || msg; } catch { }
     throw new Error(msg);
   }
 
@@ -157,7 +157,7 @@ async function api(path, opts = {}) {
 
 async function signIn() {
   const email = el('signin-email').value.trim();
-  const pass  = el('signin-password').value;
+  const pass = el('signin-password').value;
   if (!email || !pass) return msg('signin-msg', 'Enter email and password.', 'err');
 
   msg('signin-msg', 'Signing in…', 'wait');
@@ -182,10 +182,10 @@ async function signIn() {
 
 async function signUp() {
   const email = el('signup-email').value.trim();
-  const pass  = el('signup-password').value;
+  const pass = el('signup-password').value;
   if (!email || !pass) return msg('signup-msg', 'Enter email and password.', 'err');
   if (pass.trim().length < 8) return msg('signup-msg', 'Password must be ≥ 8 characters.', 'err');
-  if (!S.signupRole)    return msg('signup-msg', 'Please select a role first.', 'err');
+  if (!S.signupRole) return msg('signup-msg', 'Please select a role first.', 'err');
 
   msg('signup-msg', 'Creating account…', 'wait');
 
@@ -250,9 +250,9 @@ async function loadStats() {
    */
   try {
     const d = await api('/stats');
-    setText('stat-nodes',   fmt(d.nodes_connected ?? d.nodes   ?? 0));
+    setText('stat-nodes', fmt(d.nodes_connected ?? d.nodes ?? 0));
     setText('stat-compute', fmtLarge(d.total_compute ?? d.total_samples ?? 0));
-    setText('stat-jobs',    String(d.active_jobs ?? d.active   ?? 0));
+    setText('stat-jobs', String(d.active_jobs ?? d.active ?? 0));
   } catch {
     // Leave dashes as-is; backend may not be running on landing
   }
@@ -264,10 +264,10 @@ async function loadStats() {
 // ════════════════════════════════════════════════════════════════
 
 function launchCoordinator() {
-  const ip   = el('coord-ip').value.trim()   || 'localhost';
+  const ip = el('coord-ip').value.trim() || 'localhost';
   const port = el('coord-port').value.trim() || '5000';
   S.expectedClients = parseInt(el('coord-clients').value) || 3;
-  S.sessionName     = el('coord-session-name').value.trim() || 'Training Session';
+  S.sessionName = el('coord-session-name').value.trim() || 'Training Session';
 
   S.coordURL = ip.startsWith('http') ? ip : `http://${ip}:${port}`;
 
@@ -344,9 +344,9 @@ async function refreshCoordStatus() {
    */
   try {
     const path = S.jobId ? `/status/${S.jobId}` : '/status';
-    const d    = await api(path);
+    const d = await api(path);
 
-    setText('coord-stat-round',  d.round ?? '—');
+    setText('coord-stat-round', d.round ?? '—');
     setText('coord-stat-status', fmtStatus(d.round_status));
 
     if (d.global_accuracy > 0) {
@@ -411,7 +411,7 @@ async function submitJob() {
   }
 
   const jobName = el('job-name').value.trim() || 'Unnamed Job';
-  const rounds  = parseInt(el('job-rounds').value) || 5;
+  const rounds = parseInt(el('job-rounds').value) || 5;
 
   // Reset state from any previous job
   S.accuracyHistory = [];
@@ -477,7 +477,7 @@ async function submitJob() {
 
     // Navigate to live view
     setText('live-job-name', jobName);
-    setText('live-total',    rounds);
+    setText('live-total', rounds);
     showScreen('screen-live-training');
 
   } catch (e) {
@@ -518,14 +518,14 @@ function initAccuracyChart() {
       datasets: [{
         label: 'Global Accuracy',
         data: [],
-        borderColor:     '#00e5a0',
+        borderColor: '#00e5a0',
         backgroundColor: 'rgba(0,229,160,0.07)',
         borderWidth: 2,
         pointBackgroundColor: '#00e5a0',
-        pointBorderColor:     '#080c10',
+        pointBorderColor: '#080c10',
         pointBorderWidth: 2,
         pointRadius: 4,
-        fill:    true,
+        fill: true,
         tension: 0.4,
       }],
     },
@@ -535,15 +535,15 @@ function initAccuracyChart() {
       animation: { duration: 350 },
       scales: {
         x: {
-          grid:  { color: 'rgba(255,255,255,0.04)' },
+          grid: { color: 'rgba(255,255,255,0.04)' },
           ticks: { color: '#6b7a8d', font: { family: 'Space Mono', size: 10 } },
         },
         y: {
           min: 0, max: 100,
-          grid:  { color: 'rgba(255,255,255,0.04)' },
+          grid: { color: 'rgba(255,255,255,0.04)' },
           ticks: {
             color: '#6b7a8d',
-            font:  { family: 'Space Mono', size: 10 },
+            font: { family: 'Space Mono', size: 10 },
             callback: v => v + '%',
           },
         },
@@ -555,7 +555,7 @@ function initAccuracyChart() {
           borderColor: 'rgba(0,229,160,.3)',
           borderWidth: 1,
           titleFont: { family: 'Space Mono', size: 11 },
-          bodyFont:  { family: 'Space Mono', size: 11 },
+          bodyFont: { family: 'Space Mono', size: 11 },
           callbacks: { label: ctx => `Acc: ${ctx.parsed.y.toFixed(2)}%` },
         },
       },
@@ -582,22 +582,22 @@ function pushAccuracyPoint(round, rawAcc) {
  */
 class NetworkGraph {
   constructor(canvas) {
-    this.cv  = canvas;
+    this.cv = canvas;
     this.ctx = canvas.getContext('2d');
-    this.clients  = [];    // { id, x, y, tx, ty, op }  (tx/ty = target pos)
-    this.packets  = [];    // { ci, dir, t, spd }
-    this.time     = 0;
-    this.running  = false;
-    this.raf      = null;
+    this.clients = [];    // { id, x, y, tx, ty, op }  (tx/ty = target pos)
+    this.packets = [];    // { ci, dir, t, spd }
+    this.time = 0;
+    this.running = false;
+    this.raf = null;
   }
 
   resize() {
     const p = this.cv.parentElement;
     const r = p.getBoundingClientRect();
     // Leave 42px for the panel header
-    this.cv.width  = Math.floor(r.width);
+    this.cv.width = Math.floor(r.width);
     this.cv.height = Math.max(Math.floor(r.height) - 42, 120);
-    this.cx = this.cv.width  / 2;
+    this.cx = this.cv.width / 2;
     this.cy = this.cv.height / 2;
     this._reposition();
   }
@@ -639,9 +639,9 @@ class NetworkGraph {
 
     // Smoothly interpolate client positions & fade in
     clients.forEach(c => {
-      c.x  += (c.tx - c.x)  * 0.06;
-      c.y  += (c.ty - c.y)  * 0.06;
-      c.op  = Math.min(1, c.op + 0.025);
+      c.x += (c.tx - c.x) * 0.06;
+      c.y += (c.ty - c.y) * 0.06;
+      c.op = Math.min(1, c.op + 0.025);
     });
 
     // Dashed edges (animated dash offset for data-flow feel)
@@ -667,7 +667,7 @@ class NetworkGraph {
       const [fx, fy, tx, ty] =
         p.dir === 'in'
           ? [c.x, c.y, cx, cy]
-          : [cx,  cy,  c.x, c.y];
+          : [cx, cy, c.x, c.y];
       const px = fx + (tx - fx) * p.t;
       const py = fy + (ty - fy) * p.t;
       const col = p.dir === 'in' ? '#0077ff' : '#00e5a0';
@@ -702,15 +702,15 @@ class NetworkGraph {
       // Circle
       ctx.beginPath();
       ctx.arc(c.x, c.y, 13, 0, Math.PI * 2);
-      ctx.fillStyle   = '#0d1117';
+      ctx.fillStyle = '#0d1117';
       ctx.strokeStyle = '#0077ff';
-      ctx.lineWidth   = 1.5;
+      ctx.lineWidth = 1.5;
       ctx.fill();
       ctx.stroke();
 
       // Label
       ctx.fillStyle = '#6b7a8d';
-      ctx.font      = '9px Space Mono, monospace';
+      ctx.font = '9px Space Mono, monospace';
       ctx.textAlign = 'center';
       ctx.fillText(c.label, c.x, c.y + 26);
       ctx.restore();
@@ -727,14 +727,14 @@ class NetworkGraph {
 
     ctx.beginPath();
     ctx.arc(cx, cy, 19, 0, Math.PI * 2);
-    ctx.fillStyle   = '#0d1117';
+    ctx.fillStyle = '#0d1117';
     ctx.strokeStyle = '#00e5a0';
-    ctx.lineWidth   = 2;
+    ctx.lineWidth = 2;
     ctx.fill();
     ctx.stroke();
 
     ctx.fillStyle = '#00e5a0';
-    ctx.font      = 'bold 8px Space Mono, monospace';
+    ctx.font = 'bold 8px Space Mono, monospace';
     ctx.textAlign = 'center';
     ctx.fillText('COORD', cx, cy + 33);
   }
@@ -776,7 +776,7 @@ function initNetworkCanvas() {
 function startLivePolling() {
   clearInterval(S.pollCoord);
 
-  let lastRound  = -1;
+  let lastRound = -1;
   let lastStatus = '';
 
   const tick = async () => {
@@ -793,7 +793,7 @@ function startLivePolling() {
        * }
        */
       const path = S.jobId ? `/status/${S.jobId}` : '/status';
-      const d    = await api(path);
+      const d = await api(path);
 
       // Header readouts
       setText('live-round', d.round ?? '—');
@@ -829,7 +829,7 @@ function startLivePolling() {
           pushAccuracyPoint(r, d.global_accuracy);
         }
 
-        lastRound  = d.round;
+        lastRound = d.round;
         lastStatus = d.round_status;
       }
 
@@ -841,7 +841,7 @@ function startLivePolling() {
         const ids = (d.clients || []).map(c => c.id || c.client_id);
         if (ids.length) {
           netGraph.setClients(ids);
-          if (d.round_status === 'active')      netGraph.spawnPackets('in');
+          if (d.round_status === 'active') netGraph.spawnPackets('in');
           if (d.round_status === 'aggregating') netGraph.spawnPackets('out');
         }
       }
@@ -877,8 +877,8 @@ function onTrainingDone(d) {
   const acc = d.global_accuracy
     ? normPct(d.global_accuracy).toFixed(1) + '%'
     : '—';
-  setText('res-acc',     acc);
-  setText('res-rounds',  d.round ?? '—');
+  setText('res-acc', acc);
+  setText('res-rounds', d.round ?? '—');
   setText('res-clients', d.clients_submitted ?? '—');
   setText('res-samples', '—');
 
@@ -897,10 +897,10 @@ function buildResultsChart() {
   resultsChart = new Chart(canvas.getContext('2d'), {
     type: 'line',
     data: {
-      labels:   S.accuracyHistory.map(p => `R${p.round}`),
+      labels: S.accuracyHistory.map(p => `R${p.round}`),
       datasets: [{
-        data:            S.accuracyHistory.map(p => p.acc),
-        borderColor:     '#00e5a0',
+        data: S.accuracyHistory.map(p => p.acc),
+        borderColor: '#00e5a0',
         backgroundColor: 'rgba(0,229,160,0.07)',
         borderWidth: 2,
         fill: true,
@@ -961,18 +961,45 @@ async function downloadModel() {
 function downloadReport() {
   // Client-side JSON report from in-memory accuracy history
   const report = {
-    generated:        new Date().toISOString(),
-    job_id:           S.jobId,
-    coordinator_url:  S.coordURL,
+    generated: new Date().toISOString(),
+    job_id: S.jobId,
+    coordinator_url: S.coordURL,
     accuracy_history: S.accuracyHistory,
   };
   const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
   const a = Object.assign(document.createElement('a'), {
-    href:     URL.createObjectURL(blob),
+    href: URL.createObjectURL(blob),
     download: `netneutral_report_${Date.now()}.json`,
   });
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 100);
+}
+
+async function downloadDataShard() {
+  try {
+    log('client-log', 'Downloading data shard from coordinator...', 'wait');
+    const res = await api('/get_data_shard', {
+      method: 'POST',
+      body: { client_id: S.clientId }
+    });
+    
+    if (!(res instanceof Response)) {
+      throw new Error('Received unexpected data format from the coordinator.');
+    }
+
+    const blob = await res.blob();
+    const a = Object.assign(document.createElement('a'), {
+      href: URL.createObjectURL(blob),
+      download: `data_shard_${S.clientId}.csv`,
+    });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 100);
+    
+    log('client-log', `[OK] Data shard downloaded successfully.`, 'ok');
+  } catch (e) {
+    console.error('Download data shard failed:', e);
+    log('client-log', `[ERROR] Failed to download data shard: ${e.message}`, 'err');
+  }
 }
 
 
@@ -1031,9 +1058,9 @@ function renderSessions(sessions) {
   }
   listEl.innerHTML = '';
   sessions.forEach(s => {
-    const full   = s.connected_clients >= s.max_clients;
+    const full = s.connected_clients >= s.max_clients;
     const active = s.round_status !== 'waiting_for_clients';
-    const card   = document.createElement('div');
+    const card = document.createElement('div');
     card.className = 'session-card';
     card.innerHTML = `
       <div class="sc-info">
@@ -1045,7 +1072,7 @@ function renderSessions(sessions) {
       card.onclick = () => pickSession(card, s);
     } else {
       card.style.opacity = '.45';
-      card.style.cursor  = 'not-allowed';
+      card.style.cursor = 'not-allowed';
     }
     listEl.appendChild(card);
   });
@@ -1078,8 +1105,8 @@ async function connectClient() {
   }
 
   if (!coordURL.startsWith('http')) coordURL = 'http://' + coordURL;
-  S.coordURL  = coordURL;
-  S.clientId  = el('client-id-select').value || 'client_A';
+  S.coordURL = coordURL;
+  S.clientId = el('client-id-select').value || 'client_A';
 
   msg('client-setup-msg', '', '');
 
@@ -1091,7 +1118,7 @@ async function connectClient() {
 
 async function runDiscovery(coordURL) {
   const statusEl = el('disc-status');
-  const steps    = [
+  const steps = [
     'Contacting coordinator…',
     'Validating session…',
     'Registering node…',
@@ -1121,7 +1148,7 @@ async function runDiscovery(coordURL) {
     await api('/register', {
       method: 'POST',
       body: {
-        client_id:  S.clientId,
+        client_id: S.clientId,
         ip_address: 'web-frontend',
         // TRD v2.1 extras:
         // machine_id: S.clientId,
@@ -1161,6 +1188,7 @@ function startClientPolling() {
   clearInterval(S.pollClient);
   let lastRound = -1;
   let totalCredits = 0;
+  let dataDownloaded = false;
 
   const tick = async () => {
     try {
@@ -1181,8 +1209,8 @@ function startClientPolling() {
       const d = await api(`/api/client_status/${S.clientId}`);
 
       setText('client-stat-credits', (d.total_credits || 0).toLocaleString());
-      setText('client-stat-round',   `${d.current_round || '—'} / ${d.total_rounds || '—'}`);
-      setText('client-stat-status',  fmtStatus(d.round_status));
+      setText('client-stat-round', `${d.current_round || '—'} / ${d.total_rounds || '—'}`);
+      setText('client-stat-status', fmtStatus(d.round_status));
       setText('client-rounds-label', `${d.current_round || 0} / ${d.total_rounds || '?'} rounds`);
 
       if (d.global_accuracy > 0) {
@@ -1190,12 +1218,20 @@ function startClientPolling() {
       }
 
       const badge = el('client-conn-badge');
+
+      if (d.round_status === 'active' || d.round_status === 'data_distributing') {
+        if (!dataDownloaded) {
+          await downloadDataShard();
+          dataDownloaded = true;
+        }
+      }
+
       if (d.round_status === 'active') {
         badge.textContent = 'Training';
-        badge.className   = 'badge badge-coord';
+        badge.className = 'badge badge-coord';
       } else if (d.round_status === 'done') {
         badge.textContent = 'Complete';
-        badge.className   = 'badge badge-client';
+        badge.className = 'badge badge-client';
         log('client-log', `Training complete! Final credits: ${d.total_credits}`, 'done');
         clearInterval(S.pollClient);
         S.pollClient = null;
@@ -1207,7 +1243,7 @@ function startClientPolling() {
         addTimelineItem(d.current_round, d.round_status, earned);
         if (d.round_status === 'active')
           log('client-log', `Round ${d.current_round} — training locally…`, 'round');
-        lastRound    = d.current_round;
+        lastRound = d.current_round;
         totalCredits = d.total_credits;
       }
 
@@ -1241,7 +1277,7 @@ function addTimelineItem(round, status, creditsEarned) {
 // ════════════════════════════════════════════════════════════════
 
 function selectOS(os) {
-  ['windows','mac','linux'].forEach(o => {
+  ['windows', 'mac', 'linux'].forEach(o => {
     el(`os-${o}`).classList.toggle('active', o === os);
   });
 
@@ -1345,7 +1381,7 @@ async function loadLeaderboard() {
      * credits.py sync_to_supabase() / increment_credits() RPC is called
      * automatically when round_status transitions to 'done'.
      */
-    const d       = await api('/leaderboard');
+    const d = await api('/leaderboard');
     const entries = d.leaderboard || (Array.isArray(d) ? d : []);
 
     if (!entries.length) {
@@ -1412,7 +1448,7 @@ function msg(id, text, type) {
   const e = el(id);
   if (!e) return;
   e.textContent = text;
-  e.className   = `form-msg ${type}`;
+  e.className = `form-msg ${type}`;
 }
 
 // Set upload message
@@ -1420,17 +1456,17 @@ function uploadMsg(id, text, type) {
   const e = el(id);
   if (!e) return;
   e.textContent = text;
-  e.className   = `upload-msg ${type}`;
+  e.className = `upload-msg ${type}`;
 }
 
 // Format status strings for display
 function fmtStatus(s) {
   const map = {
     waiting_for_clients: 'Waiting for clients',
-    data_distributing:   'Distributing data',
-    active:              'Training active',
-    aggregating:         'Aggregating',
-    done:                'Complete',
+    data_distributing: 'Distributing data',
+    active: 'Training active',
+    aggregating: 'Aggregating',
+    done: 'Complete',
   };
   return map[s] ?? (s ? s.replace(/_/g, ' ') : 'Idle');
 }
@@ -1452,7 +1488,7 @@ function fmt(n) { return Number(n).toLocaleString(); }
 
 // Format byte size
 function fmtBytes(b) {
-  if (b < 1024)        return b + ' B';
+  if (b < 1024) return b + ' B';
   if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
   return (b / 1048576).toFixed(1) + ' MB';
 }
@@ -1485,4 +1521,3 @@ document.addEventListener('DOMContentLoaded', () => {
    *   })();
    */
 });
- 

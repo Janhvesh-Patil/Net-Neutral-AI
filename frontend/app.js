@@ -920,17 +920,28 @@ function buildResultsChart() {
   });
 }
 
-function downloadModel() {
+async function downloadModel() {
   /*
-   * INTEGRATION (TRD v2.1): GET /jobs/{job_id}/model → .pt binary
-   * Current: no download endpoint yet — model lives at ./global_model.pt
-   * on coordinator server. Implement a simple /download_model endpoint
-   * in Flask that sends the file:
-   *   @app.route('/download_model')
-   *   def download_model():
-   *       return send_file('global_model.pt', as_attachment=True)
+   * Prefer the active job endpoint when available.
+   * Clients often do not have S.jobId locally, so we try to resolve it
+   * from the coordinator before falling back to the legacy endpoint.
    */
-  const path = S.jobId ? `/jobs/${S.jobId}/model` : '/download_model';
+  let jobId = S.jobId;
+
+  if (!jobId) {
+    try {
+      const info = await api('/api/session_info');
+      jobId = info.job_id || info.active_job_id || info.current_job_id || info.jobId || null;
+      if (jobId) S.jobId = jobId;
+    } catch (e) {
+      // Ignore and fall back to the legacy download path below.
+    }
+  }
+
+  const path = jobId
+    ? `/jobs/${encodeURIComponent(jobId)}/model`
+    : '/download_model';
+
   window.location.href = S.coordURL + path;
 }
 

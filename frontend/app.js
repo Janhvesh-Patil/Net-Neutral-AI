@@ -930,7 +930,7 @@ async function downloadModel() {
 
   if (!jobId) {
     try {
-      const info = await api('/api/session_info');
+      const info = await api('/api/model');
       jobId = info.job_id || info.active_job_id || info.current_job_id || info.jobId || null;
       if (jobId) S.jobId = jobId;
     } catch (e) {

@@ -85,6 +85,74 @@ def run_evaluation_from_path(model_path: str, round_number: int) -> float:
     return result.accuracy
 
 # --- Core Aggregation Logic ---
+def _process_round_completion(current_round_copy, round_start_time_copy, weights_copy, samples_copy):
+    global current_round, round_status, global_accuracy, round_start_time
+
+    print(f"\n--- All clients submitted for round {current_round_copy}. Running FedAvg ---")
+
+    client_weights = {}
+    for cid, fpath in weights_copy.items():
+        state_dict, err = fedavg.load_client_weights(fpath, cid)
+        if not err:
+            client_weights[cid] = state_dict
+        else:
+            print(f"[Coordinator] ⚠ Error loading {cid}: {err}")
+
+    try:
+        # 1. Run FedAvg
+        result = fedavg.federated_average(client_weights, client_samples=samples_copy)
+
+        # 2. Save using the absolute MODEL_PATH
+        fedavg.save_global_model(result.global_state_dict, MODEL_PATH)
+
+        # 3. Evaluate the new global model
+        global_acc = run_evaluation_from_path(MODEL_PATH, current_round_copy)
+
+        # 4. Log the round and print leaderboard
+        credits.log_round(current_round_copy, round_start_time_copy, result.clients_included, global_acc)
+        board = credits.get_leaderboard()
+
+        if current_round_copy >= TOTAL_ROUNDS:
+            print(credits.format_final_leaderboard(board))
+        else:
+            print(credits.format_leaderboard(board, current_round_copy))
+
+        # Update global accuracy safely
+        with state_lock:
+            global_accuracy = global_acc
+
+    except fedavg.FedAvgError as e:
+        print(f"[Coordinator] ⚠ FedAvg failed: {e}")
+    except Exception as e:
+        print(f"[Coordinator] ⚠ Evaluation failed: {e}")
+
+    # 5. Clean up temporary weight files
+    for fpath in list(weights_copy.values()):
+        if os.path.exists(fpath):
+            os.remove(fpath)
+
+    # 6. Step the state machine forward
+    if current_round_copy >= TOTAL_ROUNDS:
+        with state_lock:
+            round_status = 'done'
+        print("\n[Coordinator] Training complete! Final leaderboard ready.")
+
+        # Sync credits to central Supabase database
+        if SUPABASE_SYNC_AVAILABLE:
+            try:
+                supabase_sync.sync_credits_to_cloud()
+            except Exception as e:
+                print(f"[Coordinator] Cloud sync failed (non-fatal): {e}")
+    else:
+        with state_lock:
+            current_round += 1
+            # FIX 1.1: After round 1, data is already distributed — go directly
+            # to 'active' so check_round_completion() doesn't return early.
+            # Only the first /start_training call uses 'data_distributing'.
+            round_status = 'active'
+            round_start_time = datetime.datetime.now()
+        print(f"\n[Coordinator] Ready for Round {current_round}")
+
 def check_round_completion():
     global current_round, round_status, global_accuracy, round_start_time
 
@@ -94,66 +162,23 @@ def check_round_completion():
 
     if len(submitted_weights) >= len(registered_clients) > 0:
         round_status = 'aggregating'
-        print(f"\n--- All clients submitted for round {current_round}. Running FedAvg ---")
-
-        client_weights = {}
-        for cid, fpath in submitted_weights.items():
-            state_dict, err = fedavg.load_client_weights(fpath, cid)
-            if not err:
-                client_weights[cid] = state_dict
-            else:
-                print(f"[Coordinator] ⚠ Error loading {cid}: {err}")
-
-        try:
-            # 1. Run FedAvg
-            result = fedavg.federated_average(client_weights, client_samples=submitted_samples)
-
-            # 2. Save using the absolute MODEL_PATH
-            fedavg.save_global_model(result.global_state_dict, MODEL_PATH)
-
-            # 3. Evaluate the new global model
-            global_accuracy = run_evaluation_from_path(MODEL_PATH, current_round)
-
-            # 4. Log the round and print leaderboard
-            credits.log_round(current_round, round_start_time, result.clients_included, global_accuracy)
-            board = credits.get_leaderboard()
-
-            if current_round >= TOTAL_ROUNDS:
-                print(credits.format_final_leaderboard(board))
-            else:
-                print(credits.format_leaderboard(board, current_round))
-
-        except fedavg.FedAvgError as e:
-            print(f"[Coordinator] ⚠ FedAvg failed: {e}")
-        except Exception as e:
-            print(f"[Coordinator] ⚠ Evaluation failed: {e}")
-
-        # 5. Clean up temporary weight files (FIXED os.remove)
-        for fpath in list(submitted_weights.values()):
-            if os.path.exists(fpath):
-                os.remove(fpath)
+        
+        # Snapshot state for the background thread
+        current_round_copy = current_round
+        round_start_time_copy = round_start_time
+        weights_copy = submitted_weights.copy()
+        samples_copy = submitted_samples.copy()
+        
+        # Clear globals immediately so they are ready for the next round
         submitted_weights.clear()
         submitted_samples.clear()
-
-        # 6. Step the state machine forward
-        if current_round >= TOTAL_ROUNDS:
-            round_status = 'done'
-            print("\n[Coordinator] Training complete! Final leaderboard ready.")
-
-            # Sync credits to central Supabase database
-            if SUPABASE_SYNC_AVAILABLE:
-                try:
-                    supabase_sync.sync_credits_to_cloud()
-                except Exception as e:
-                    print(f"[Coordinator] Cloud sync failed (non-fatal): {e}")
-        else:
-            current_round += 1
-            # FIX 1.1: After round 1, data is already distributed — go directly
-            # to 'active' so check_round_completion() doesn't return early.
-            # Only the first /start_training call uses 'data_distributing'.
-            round_status = 'active'
-            round_start_time = datetime.datetime.now()
-            print(f"\n[Coordinator] Ready for Round {current_round}")
+        
+        # Start background thread
+        threading.Thread(
+            target=_process_round_completion,
+            args=(current_round_copy, round_start_time_copy, weights_copy, samples_copy),
+            daemon=True
+        ).start()
 
 # --- API Endpoints ---
 

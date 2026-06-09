@@ -90,8 +90,20 @@ def divide_dataset(csv_path: str, num_clients: int) -> Dict[str, pd.DataFrame]:
             "Install with: pip install scikit-learn"
         )
 
+    # NEW: 80/20 split for testing
+    train_df, test_df = train_test_split(
+        df,
+        test_size=0.2,
+        stratify=df['label'],
+        random_state=42
+    )
+    
+    # Save test dataset exclusively for coordinator
+    test_csv_path = os.path.join(os.path.dirname(csv_path), "uploaded_test.csv")
+    test_df.to_csv(test_csv_path, index=False)
+
     shards = {}
-    remaining_df = df.copy()
+    remaining_df = train_df.copy()
 
     # Divide into N-1 shards (last one gets remainder)
     for i, client_id in enumerate(clients[:-1]):

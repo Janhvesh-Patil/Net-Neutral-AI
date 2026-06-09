@@ -67,8 +67,9 @@ def run_evaluation_from_path(model_path: str, round_number: int) -> float:
     from client.model import TransformerClassifier
     from client.data import setup_data, get_validation_dataloader
     
-    # 1. Load the validation dataset
-    _, _, test_texts, test_labels, vocab = setup_data(data_dir=os.path.join(project_root, "data"), save_vocab=False)
+    # 1. Load the validation dataset (using the 20% test split from uploaded data)
+    test_csv_path = os.path.join(COORDINATOR_DIR, "uploaded_test.csv")
+    test_texts, test_labels, _, _, vocab = setup_data(local_shard_path=test_csv_path, save_vocab=False)
     val_loader = get_validation_dataloader(test_texts, test_labels, vocab)
     
     # 2. Initialize an empty model and load the weights from the file

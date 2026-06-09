@@ -11,13 +11,7 @@ from typing import Dict, List, Tuple, Optional
 import torch
 from torch.utils.data import Dataset, DataLoader
 
-# ── Try importing datasets library ───────────────────────────────────────────
-try:
-    from datasets import load_dataset
-    HF_DATASETS_AVAILABLE = True
-except ImportError:
-    HF_DATASETS_AVAILABLE = False
-    print("[data.py] WARNING: 'datasets' library not found. Run: pip install datasets")
+HF_DATASETS_AVAILABLE = False
 
 
 # ── Constants (must match config.py and TRD spec) ────────────────────────────
@@ -50,54 +44,7 @@ LABEL_MAP = {
 # ─────────────────────────────────────────────────────────────────────────────
 
 def load_imdb_data(data_dir: Optional[str] = None) -> Tuple[List[str], List[int], List[str], List[int]]:
-
-    # ── Attempt 1: local CSV files ────────────────────────────────────────────
-    if data_dir is not None:
-        def _find_file(folder, *names):
-            for name in names:
-                p = os.path.join(folder, name)
-                if os.path.exists(p):
-                    return p
-            return None
-
-        train_path = _find_file(data_dir, "imdb_train.csv", "train.csv")
-        test_path  = _find_file(data_dir, "imdb_test.csv",  "test.csv")
-
-        if train_path and test_path:
-            print("[data.py] Loading from local CSV files...")
-            train_texts, train_labels = _load_csv(train_path)
-            test_texts,  test_labels  = _load_csv(test_path)
-            print(f"[data.py] Loaded {len(train_texts):,} train + {len(test_texts):,} test samples")
-            return train_texts, train_labels, test_texts, test_labels
-        else:
-            print(f"[data.py] CSV files not found at {data_dir} — falling back to HuggingFace")
-
-    # ── Attempt 2: ajaykarthick/imdb-movie-reviews ───────────────────────────
-    if HF_DATASETS_AVAILABLE:
-        try:
-            print("[data.py] Loading ajaykarthick/imdb-movie-reviews from HuggingFace...")
-            dataset = load_dataset("ajaykarthick/imdb-movie-reviews")
-            train_texts, train_labels = _extract_hf_split(dataset["train"])
-            test_texts,  test_labels  = _extract_hf_split(dataset["test"])
-            print(f"[data.py] Loaded {len(train_texts):,} train + {len(test_texts):,} test samples")
-            return train_texts, train_labels, test_texts, test_labels
-        except Exception as e:
-            print(f"[data.py] ajaykarthick dataset failed ({e}) — trying standard imdb")
-
-        # ── Attempt 3: standard HuggingFace imdb dataset ─────────────────────
-        try:
-            print("[data.py] Loading standard 'imdb' dataset from HuggingFace...")
-            dataset = load_dataset("imdb")
-            train_texts  = dataset["train"]["text"]
-            train_labels = dataset["train"]["label"]
-            test_texts   = dataset["test"]["text"]
-            test_labels  = dataset["test"]["label"]
-            print(f"[data.py] Loaded {len(train_texts):,} train + {len(test_texts):,} test samples")
-            return train_texts, train_labels, test_texts, test_labels
-        except Exception as e:
-            raise RuntimeError(f"[data.py] All data loading attempts failed. Last error: {e}")
-
-    raise RuntimeError("[data.py] 'datasets' library not installed and no local files found.")
+    raise RuntimeError("[data.py] load_imdb_data is deprecated. A local_shard_path MUST be provided.")
 
 
 def _load_csv(path: str) -> Tuple[List[str], List[int]]:
@@ -124,17 +71,6 @@ def _load_csv(path: str) -> Tuple[List[str], List[int]]:
     return texts, labels
 
 
-def _extract_hf_split(split) -> Tuple[List[str], List[int]]:
-
-    texts, labels = [], []
-    for item in split:
-        text  = item.get("review") or item.get("text") or ""
-        label = item.get("sentiment") or item.get("label") or 0
-        if isinstance(label, str):
-            label = LABEL_MAP.get(label.strip().lower(), 0)
-        texts.append(text.strip())
-        labels.append(int(label))
-    return texts, labels
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -320,14 +256,11 @@ def setup_data(
     Returns:
         Tuple of (train_texts, train_labels, test_texts, test_labels, vocab)
     """
-    # If local_shard_path provided, load client's data from there
     if local_shard_path and os.path.exists(local_shard_path):
         train_texts, train_labels = _load_csv(local_shard_path)
-        # For local shard, we don't have a separate test set (only coordinator has it)
         test_texts, test_labels = [], []
     else:
-        # Original behavior: load from data_dir
-        train_texts, train_labels, test_texts, test_labels = load_imdb_data(data_dir)
+        raise FileNotFoundError(f"[data.py] local_shard_path not provided or does not exist: {local_shard_path}")
 
     if vocab_path and os.path.exists(vocab_path):
         vocab = Vocabulary.load(vocab_path)

@@ -10,8 +10,8 @@ Use the following settings when creating a new **Web Service** on Render:
 
 | Field | Setting |
 | :--- | :--- |
-| **Repository** | `https://github.com/Janhvesh-Patil/Net-Neutral-AI` |
-| **Branch** | `scope_creep_update_070626` |
+| **Repository** | `https://github.com/AtharvHuilgol/Net-Neutral-AI` |
+| **Branch** | `main` |
 | **Runtime** | `Python` |
 | **Build Command** | `pip install -r backend/coordinator/requirements.txt` |
 | **Start Command** | `python backend/coordinator/server.py` |

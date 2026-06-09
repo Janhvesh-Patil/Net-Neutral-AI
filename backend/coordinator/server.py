@@ -21,7 +21,11 @@ try:
 except ImportError:
     SUPABASE_SYNC_AVAILABLE = False
 
-app = Flask(__name__, static_folder='../../frontend', static_url_path='/')
+app = Flask(
+    __name__,
+    static_folder=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'frontend'),
+    static_url_path=''
+)
 CORS(app)
 
 # --- DATABASE INITIALIZATION ---
@@ -429,15 +433,24 @@ def serve_frontend():
     frontend_path = os.path.join(project_root, 'frontend', 'index.html')
     if os.path.exists(frontend_path):
         return send_file(frontend_path)
-    return jsonify({'error': 'Frontend not found'}), 404
+    # In production if frontend not found, return API health instead of 404
+    return jsonify({'status': 'ok', 'service': 'Net-Neutral AI Coordinator', 'version': '2.1'}), 200
 
 if __name__ == '__main__':
     
     # Use absolute MODEL_PATH for the startup safety check
-    if not os.path.exists(MODEL_PATH):
-        print(f"[Coordinator] {MODEL_PATH} not found. Generating a safe dummy checkpoint for startup.")
-        # Create a tiny dummy state dict
+    # Checkpoint reset — always start from the clean pretrained baseline
+    PRETRAINED_BACKUP = os.path.join(COORDINATOR_DIR, 'checkpoint_pretrained_backup.pt')
+
+    if os.path.exists(PRETRAINED_BACKUP):
+        import shutil
+        shutil.copy2(PRETRAINED_BACKUP, MODEL_PATH)
+        print("[Coordinator] ✓  Checkpoint reset to pretrained baseline")
+    elif not os.path.exists(MODEL_PATH):
+        print(f"[Coordinator] ⚠  No checkpoint found. Generating dummy for startup.")
         torch.save({"dummy": torch.tensor([1.0])}, MODEL_PATH)
+    else:
+        print("[Coordinator] ⚠  No backup found — using existing checkpoint.pt")
 
     # Bind to PORT environment variable if available (e.g. on Render), default to 5000
     port = int(os.environ.get("PORT", 5000))

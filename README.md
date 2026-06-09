@@ -131,8 +131,6 @@ net-neutral-ai/
 │   ├── pretrain_log.json # Training metadata from baseline run
 │   └── requirements.txt
 ├── data/
-│   ├── imdb_train.csv    # 40,000 training reviews (download separately)
-│   ├── imdb_test.csv     # 10,000 test reviews (download separately)
 │   └── vocab.json        # Shared vocabulary — 10,000 tokens (committed)
 ├── shared/
 │   └── config.py         # Coordinator IP, round count, hyperparameters
@@ -179,11 +177,10 @@ pip install -r coordinator/requirements.txt
 pip install -r client/requirements.txt
 ```
 
-### Step 4 — Download dataset
+### Step 4 — Upload dataset via Dashboard
 
-Download IMDb dataset from [HuggingFace](https://huggingface.co/datasets/ajaykarthick/imdb-movie-reviews) and place files in `data/`:
-- `data/imdb_train.csv` (40,000 rows)
-- `data/imdb_test.csv` (10,000 rows)
+The coordinator uses a dynamic 80/20 data split. Rather than downloading massive datasets manually, you simply upload a `.csv` file via the Coordinator's Web Dashboard. 
+The system will automatically partition 80% to distribute to clients and securely hold 20% on the coordinator for evaluation.
 
 `vocab.json` and `checkpoint.pt` are already committed — no need to regenerate them.
 

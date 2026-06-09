@@ -35,7 +35,7 @@
 
 // ── GLOBAL STATE ─────────────────────────────────────────────────
 const S = {
-  coordURL:        "https://net-neutral-ai.onrender.com:5000", // Set on coordinator setup
+  coordURL:        window.location.origin, // Set on coordinator setup
   role:            null,                   // 'coordinator' | 'client'
   clientId:        null,                   // e.g. 'client_A'
   sessionName:     '',

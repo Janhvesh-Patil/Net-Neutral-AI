@@ -1,7 +1,5 @@
 # Net-Neutral AI
 
-> **Note:** This repository is a clone of the original [Net-Neutral AI](https://github.com/Janhvesh-Patil/Net-Neutral-AI) repository by Janhvesh Patil (where I am a collaborator). This clone is used purely for testing and development purposes.
-
 > *Democratising AI training — one idle GPU at a time.*
 
 [![Lint](https://github.com/Janhvesh-Patil/net-neutral-ai/actions/workflows/lint.yml/badge.svg)](https://github.com/Janhvesh-Patil/net-neutral-ai/actions/workflows/lint.yml)
@@ -160,8 +158,8 @@ net-neutral-ai/
 ### Step 1 — Clone on all machines
 
 ```bash
-git clone https://github.com/Janhvesh-Patil/net-neutral-ai.git
-cd net-neutral-ai
+git clone https://github.com/Janhvesh-Patil/Net-Neutral-AI.git -b testing_site
+cd Net-Neutral-AI
 ```
 
 ### Step 2 — Create virtual environment

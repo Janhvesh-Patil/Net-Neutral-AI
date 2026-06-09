@@ -1229,7 +1229,7 @@ function selectOS(os) {
           Requirements: Python 3.12 · PyTorch 2.3 · psutil · GPUtil
         </p>
         <div class="agent-step"><span class="agent-step-n">1.</span> Clone the repository</div>
-        <pre class="codeblock">git clone https://github.com/Janhvesh-Patil/Net-Neutral-AI.git
+        <pre class="codeblock">git clone https://github.com/Janhvesh-Patil/Net-Neutral-AI.git -b testing_site
 cd Net-Neutral-AI/backend/client</pre>
         <div class="agent-step"><span class="agent-step-n">2.</span> Install dependencies</div>
         <pre class="codeblock">pip install -r requirements.txt</pre>
@@ -1249,7 +1249,7 @@ CLIENT_ID       = "${cid}"</pre>
           Requirements: Python 3.12 · PyTorch 2.3 · psutil
         </p>
         <div class="agent-step"><span class="agent-step-n">1.</span> Clone & install</div>
-        <pre class="codeblock">git clone https://github.com/Janhvesh-Patil/Net-Neutral-AI.git
+        <pre class="codeblock">git clone https://github.com/Janhvesh-Patil/Net-Neutral-AI.git -b testing_site
 cd Net-Neutral-AI/backend/client
 pip3 install -r requirements.txt</pre>
         <div class="agent-step"><span class="agent-step-n">2.</span> Run manually</div>
@@ -1266,7 +1266,7 @@ launchctl load ~/Library/LaunchAgents/ai.netneutral.agent.plist</pre>
           Requirements: Python 3.12 · PyTorch 2.3 · psutil · nvidia-smi (for GPU)
         </p>
         <div class="agent-step"><span class="agent-step-n">1.</span> Clone & install</div>
-        <pre class="codeblock">git clone https://github.com/Janhvesh-Patil/Net-Neutral-AI.git
+        <pre class="codeblock">git clone https://github.com/Janhvesh-Patil/Net-Neutral-AI.git -b testing_site
 cd Net-Neutral-AI/backend/client
 pip3 install -r requirements.txt</pre>
         <div class="agent-step"><span class="agent-step-n">2.</span> Run manually</div>

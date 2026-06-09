@@ -10,8 +10,8 @@ Use the following settings when creating a new **Web Service** on Render:
 
 | Field | Setting |
 | :--- | :--- |
-| **Repository** | `https://github.com/AtharvHuilgol/Net-Neutral-AI` |
-| **Branch** | `main` |
+| **Repository** | `https://github.com/Janhvesh-Patil/Net-Neutral-AI` |
+| **Branch** | `testing_site` |
 | **Runtime** | `Python` |
 | **Build Command** | `pip install -r backend/coordinator/requirements.txt` |
 | **Start Command** | `python backend/coordinator/server.py` |
@@ -75,7 +75,7 @@ python3 client.py --client_id client_A --coordinator_url https://your-app-name.o
 
 ### Phase 1: Deploying the Coordinator on Render
 1. **Create a New Web Service**: Log in to [Render.com](https://render.com) and click **New > Web Service**.
-2. **Connect Repository**: Select your GitHub repository (`AtharvHuilgol/Net-Neutral-AI`).
+2. **Connect Repository**: Select your GitHub repository (`Janhvesh-Patil/Net-Neutral-AI`).
 3. **Configure Settings**:
    - **Runtime**: Python
    - **Build Command**: `pip install -r backend/coordinator/requirements.txt`

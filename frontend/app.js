@@ -4,7 +4,7 @@
    ============================================================ */
 
 // ── Global State ────────────────────────────────────────────────
-let coordinatorURL = window.location.origin;
+let coordinatorURL = "https://net-neutral-ai.onrender.com:5000";
 let currentRole = null;          // 'coordinator' or 'client'
 let clientName = null;           // e.g. 'client_A'
 let expectedClients = 3;

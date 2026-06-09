@@ -372,6 +372,12 @@ def main():
         help=f'Client identifier (default: {config.CLIENT_ID})'
     )
     parser.add_argument(
+        '--coordinator_url',
+        type=str,
+        default=None,
+        help='URL of the coordinator server'
+    )
+    parser.add_argument(
         '--data_dir',
         type=str,
         default=None,
@@ -385,6 +391,9 @@ def main():
     )
     
     args = parser.parse_args()
+
+    if args.coordinator_url:
+        config.BASE_URL = args.coordinator_url
 
     client_dir = os.path.dirname(os.path.abspath(__file__))
     backend_dir = os.path.dirname(client_dir)

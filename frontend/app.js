@@ -264,12 +264,10 @@ async function loadStats() {
 // ════════════════════════════════════════════════════════════════
 
 function launchCoordinator() {
-  const ip   = el('coord-ip').value.trim()   || 'localhost';
-  const port = el('coord-port').value.trim() || '5000';
   S.expectedClients = parseInt(el('coord-clients').value) || 3;
   S.sessionName     = el('coord-session-name').value.trim() || 'Training Session';
 
-  S.coordURL = ip.startsWith('http') ? ip : `http://${ip}:${port}`;
+  S.coordURL = window.location.origin;
 
   setText('coord-dash-url', S.coordURL.replace(/^https?:\/\//, ''));
   setText('coord-session-badge', S.sessionName || 'Local Session');
@@ -1037,21 +1035,7 @@ function pickSession(cardEl, session) {
 }
 
 async function connectClient() {
-  // Resolve coordinator URL from active tab
-  const tabEl = document.querySelector('.tab-btn.active');
-  if (!tabEl) { msg('client-setup-msg', 'Select a connection method.', 'err'); return; }
-  const tab = tabEl.id;
-  let coordURL = '';
-
-  if (tab === 'tab-browse' && S.selectedSession) {
-    coordURL = S.selectedSession;
-  } else {
-    coordURL = el('manual-coord-url').value.trim();
-    if (!coordURL) {
-      msg('client-setup-msg', 'Enter a coordinator URL or browse sessions.', 'err');
-      return;
-    }
-  }
+  let coordURL = window.location.origin;
 
   if (!coordURL.startsWith('http')) coordURL = 'http://' + coordURL;
   S.coordURL  = coordURL;
@@ -1245,15 +1229,15 @@ function selectOS(os) {
           Requirements: Python 3.12 · PyTorch 2.3 · psutil · GPUtil
         </p>
         <div class="agent-step"><span class="agent-step-n">1.</span> Clone the repository</div>
-        <pre class="codeblock">git clone https://github.com/your-org/net-neutral-ai.git
-cd net-neutral-ai/agent</pre>
+        <pre class="codeblock">git clone https://github.com/Janhvesh-Patil/Net-Neutral-AI.git
+cd Net-Neutral-AI/backend/client</pre>
         <div class="agent-step"><span class="agent-step-n">2.</span> Install dependencies</div>
         <pre class="codeblock">pip install -r requirements.txt</pre>
         <div class="agent-step"><span class="agent-step-n">3.</span> Set coordinator URL in config.py</div>
         <pre class="codeblock">COORDINATOR_URL = "${url}"
 CLIENT_ID       = "${cid}"</pre>
         <div class="agent-step"><span class="agent-step-n">4.</span> Run manually</div>
-        <pre class="codeblock">python agent.py --client_id ${cid} --coordinator_url ${url}</pre>
+        <pre class="codeblock">python client.py --client_id ${cid} --coordinator_url ${url}</pre>
         <div class="agent-step"><span class="agent-step-n">5.</span> (Optional) Install as background service via Task Scheduler</div>
         <pre class="codeblock">install\\install_windows.bat</pre>
       </div>`,
@@ -1265,11 +1249,11 @@ CLIENT_ID       = "${cid}"</pre>
           Requirements: Python 3.12 · PyTorch 2.3 · psutil
         </p>
         <div class="agent-step"><span class="agent-step-n">1.</span> Clone & install</div>
-        <pre class="codeblock">git clone https://github.com/your-org/net-neutral-ai.git
-cd net-neutral-ai/agent
+        <pre class="codeblock">git clone https://github.com/Janhvesh-Patil/Net-Neutral-AI.git
+cd Net-Neutral-AI/backend/client
 pip3 install -r requirements.txt</pre>
         <div class="agent-step"><span class="agent-step-n">2.</span> Run manually</div>
-        <pre class="codeblock">python3 agent.py --client_id ${cid} --coordinator_url ${url}</pre>
+        <pre class="codeblock">python3 client.py --client_id ${cid} --coordinator_url ${url}</pre>
         <div class="agent-step"><span class="agent-step-n">3.</span> (Optional) Install as launchd service</div>
         <pre class="codeblock">bash install/install_mac.sh
 launchctl load ~/Library/LaunchAgents/ai.netneutral.agent.plist</pre>
@@ -1282,11 +1266,11 @@ launchctl load ~/Library/LaunchAgents/ai.netneutral.agent.plist</pre>
           Requirements: Python 3.12 · PyTorch 2.3 · psutil · nvidia-smi (for GPU)
         </p>
         <div class="agent-step"><span class="agent-step-n">1.</span> Clone & install</div>
-        <pre class="codeblock">git clone https://github.com/your-org/net-neutral-ai.git
-cd net-neutral-ai/agent
+        <pre class="codeblock">git clone https://github.com/Janhvesh-Patil/Net-Neutral-AI.git
+cd Net-Neutral-AI/backend/client
 pip3 install -r requirements.txt</pre>
         <div class="agent-step"><span class="agent-step-n">2.</span> Run manually</div>
-        <pre class="codeblock">python3 agent.py --client_id ${cid} --coordinator_url ${url}</pre>
+        <pre class="codeblock">python3 client.py --client_id ${cid} --coordinator_url ${url}</pre>
         <div class="agent-step"><span class="agent-step-n">3.</span> (Optional) Install as systemd user service</div>
         <pre class="codeblock">bash install/install_linux.sh
 systemctl --user enable netneutral-agent

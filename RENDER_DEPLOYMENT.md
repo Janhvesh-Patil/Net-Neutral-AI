@@ -46,28 +46,25 @@ Because Render Web Services use an ephemeral filesystem, the local SQLite databa
 
 Once the app is deployed, open the Render public URL (e.g., `https://your-app-name.onrender.com`).
 
-* **Auto-Connection**: The Web UI automatically detects that it is hosted and will default its target address to `window.location.origin`. You can leave the **IP Address** and **Port** inputs blank on the setup screen and click **Launch Coordinator Dashboard** or **Connect** to proceed!
+* **Auto-Connection**: The Web UI automatically detects that it is hosted and will dynamically route all traffic through `window.location.origin`. There are no IP Address or Port inputs to configure! Just click **Launch Coordinator Dashboard** or **Connect** to proceed!
 
 ---
 
 ## 🔌 Connecting Local Python Clients
 
-To connect local training client nodes to the cloud coordinator on Render, pass the Render URL using the `COORDINATOR_BASE_URL` environment variable before starting the client:
+To connect local training client nodes to the cloud coordinator on Render, simply pass the Render URL using the `--coordinator_url` argument when starting the client. The frontend provides copy-paste commands, but you can also run them manually:
 
 ### Command Prompt (Windows CMD)
 ```cmd
-set COORDINATOR_BASE_URL=https://your-app-name.onrender.com
-python client.py --client_id client_A
+python client.py --client_id client_A --coordinator_url https://your-app-name.onrender.com
 ```
 
 ### PowerShell (Windows)
 ```powershell
-$env:COORDINATOR_BASE_URL="https://your-app-name.onrender.com"
-python client.py --client_id client_A
+python client.py --client_id client_A --coordinator_url https://your-app-name.onrender.com
 ```
 
 ### Bash (Linux / macOS / Git Bash)
 ```bash
-export COORDINATOR_BASE_URL="https://your-app-name.onrender.com"
-python client.py --client_id client_A
+python3 client.py --client_id client_A --coordinator_url https://your-app-name.onrender.com
 ```

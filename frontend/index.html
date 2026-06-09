@@ -216,22 +216,8 @@
       <div class="setup-card hud-panel coord-panel">
         <h3 class="card-title">Network Configuration</h3>
         <!--
-          INTEGRATION: coordinatorURL is built from these inputs.
-          This URL is used for all subsequent API calls.
-          For demo: localhost:5000. For LAN: the machine's LAN IP.
+          INTEGRATION: coordinatorURL is now automatically detected from window.location.origin
         -->
-        <div class="two-col">
-          <div class="field-group">
-            <label class="field-label">Server IP Address</label>
-            <input type="text" class="field-input mono" id="coord-ip"
-                   placeholder="192.168.1.100" value="localhost">
-          </div>
-          <div class="field-group">
-            <label class="field-label">Port</label>
-            <input type="number" class="field-input mono" id="coord-port"
-                   value="5000" min="1000" max="65535">
-          </div>
-        </div>
         <div class="field-group">
           <label class="field-label">Session Name
             <span class="hint-tag">— shown to clients in lobby</span>
@@ -603,38 +589,7 @@
       <div class="setup-card hud-panel client-panel">
         <h3 class="card-title">Find a Session</h3>
 
-        <div class="tab-row">
-          <button class="tab-btn active" id="tab-browse" onclick="switchTab('browse')">Browse Sessions</button>
-          <button class="tab-btn" id="tab-manual" onclick="switchTab('manual')">Manual Connect</button>
-        </div>
-
-        <!-- Browse tab -->
-        <div id="tab-pane-browse">
-          <div class="browse-header">
-            <label class="field-label" style="margin:0">Active Sessions</label>
-            <button class="btn-ghost btn-sm" onclick="scanSessions()">↻ Scan Network</button>
-          </div>
-          <!--
-            INTEGRATION (Phase 2):
-            GET /api/lobby?subnet={subnet}
-            Returns: [{ session_id, session_name, coordinator_ip, coordinator_port,
-                        round_status, connected_clients, max_clients, base_url, last_heartbeat }]
-            The discovery_host defaults to the page origin, or whatever was entered in manual connect.
-            Stale sessions (>45s without heartbeat) are filtered server-side.
-          -->
-          <div class="sessions-list" id="sessions-list">
-            <div class="sessions-empty mono text-muted">Click "Scan Network" to find active coordinators</div>
-          </div>
-        </div>
-
-        <!-- Manual tab -->
-        <div id="tab-pane-manual" style="display:none">
-          <div class="field-group">
-            <label class="field-label">Coordinator URL</label>
-            <input type="text" class="field-input mono" id="manual-coord-url"
-                   placeholder="http://192.168.1.100:5000">
-          </div>
-        </div>
+        <!-- Connection URL is automatically detected -->
 
         <div class="field-group" style="margin-top:16px">
           <label class="field-label">Your Client ID

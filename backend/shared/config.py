@@ -8,10 +8,7 @@ Example: 192.168.1.42
 import os
 COORDINATOR_IP = os.environ.get('COORDINATOR_IP', '').strip()
 if not COORDINATOR_IP or COORDINATOR_IP == 'IP_ADDRESS_OF_COORDINATOR':
-    import sys
-    print("[CONFIG ERROR] COORDINATOR_IP environment variable not set!")
-    print("Set it with: export COORDINATOR_IP=192.168.x.x")
-    sys.exit(1)
+    COORDINATOR_IP = '127.0.0.1'
 COORDINATOR_PORT = int(os.environ.get('COORDINATOR_PORT', 5000))
 BASE_URL = os.environ.get('COORDINATOR_BASE_URL')
 if not BASE_URL:

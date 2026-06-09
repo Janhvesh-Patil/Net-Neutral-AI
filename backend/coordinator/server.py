@@ -445,7 +445,7 @@ if __name__ == '__main__':
     if os.path.exists(PRETRAINED_BACKUP):
         import shutil
         shutil.copy2(PRETRAINED_BACKUP, MODEL_PATH)
-        print("[Coordinator] ✓  Checkpoint reset to pretrained baseline")
+        print("[Coordinator] [OK] Checkpoint reset to pretrained baseline")
     elif not os.path.exists(MODEL_PATH):
         print(f"[Coordinator] ⚠  No checkpoint found. Generating dummy for startup.")
         torch.save({"dummy": torch.tensor([1.0])}, MODEL_PATH)

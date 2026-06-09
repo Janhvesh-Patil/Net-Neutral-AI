@@ -1,5 +1,7 @@
 # Net-Neutral AI
 
+> **Note:** This repository is a clone of the original [Net-Neutral AI](https://github.com/Janhvesh-Patil/Net-Neutral-AI) repository by Janhvesh Patil (where I am a collaborator). This clone is used purely for testing and development purposes.
+
 > *Democratising AI training — one idle GPU at a time.*
 
 [![Lint](https://github.com/Janhvesh-Patil/net-neutral-ai/actions/workflows/lint.yml/badge.svg)](https://github.com/Janhvesh-Patil/net-neutral-ai/actions/workflows/lint.yml)

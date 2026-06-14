@@ -41,7 +41,7 @@
     </header>
 
     <main class="hero">
-      <p class="hero-eyebrow mono">v2.1 — DECENTRALIZED · FEDERATED · PRIVATE</p>
+      <p class="hero-eyebrow mono">v2.2 — DECENTRALIZED · FEDERATED · PRIVATE</p>
       <h1 class="hero-title">Train AI.<br><span class="text-coord">Together.</span></h1>
       <p class="hero-sub">Upload a dataset. The network trains. You receive the model — raw data never leaves any device.</p>
       <div class="hero-actions">
@@ -265,6 +265,7 @@
             TODO (TRD v2.1): Display supabase.auth.getSession() user email here
           -->
           <span class="badge badge-coord" id="coord-session-badge">Local Session</span>
+          <button class="btn-ghost btn-sm" onclick="showScreen('screen-agent-setup')">Agent Setup</button>
           <button class="btn-ghost btn-sm" onclick="showScreen('screen-new-job')">+ New Job</button>
           <button class="btn-ghost btn-sm" onclick="exitDashboard()">Exit</button>
         </div>
@@ -524,6 +525,31 @@
         </div>
 
       </div><!-- /training-grid -->
+
+      <!-- Panel E: Epoch-level training metrics (SSE-fed) -->
+      <div class="t-panel-wide hud-panel coord-panel" id="panel-epoch-metrics">
+        <div class="panel-head">
+          <h3 class="panel-title mono">EPOCH TRAINING METRICS</h3>
+          <span class="live-ind">
+            <span class="live-dot"></span>
+            <span class="mono small-caps" style="font-size:10px;color:var(--muted)">REAL-TIME</span>
+          </span>
+        </div>
+        <div class="epoch-metrics-header mono">
+          <span>ROUND/EPOCH</span>
+          <span>LOSS</span>
+          <span>ACCURACY</span>
+          <span>SAMPLES</span>
+          <span>TIME</span>
+        </div>
+        <div class="epoch-metrics-scroll" id="epoch-metrics-panel" style="display:none">
+          <!-- Populated by SSE epoch_update events via updateEpochMetrics() -->
+        </div>
+        <div class="epoch-metrics-empty mono text-muted" id="epoch-metrics-empty">
+          Waiting for epoch data from training clients…
+        </div>
+      </div>
+
     </div><!-- /dash-layout -->
   </div><!-- /screen-live-training -->
 
@@ -567,6 +593,9 @@
           <button class="btn-coord" onclick="downloadModel()">⬇ Model (.pt)</button>
           <button class="btn-ghost" onclick="downloadReport()">⬇ Report (.json)</button>
         </div>
+        <p class="cleanup-note mono text-muted" style="margin-top:12px;font-size:11px">
+          💾 Session data is automatically cleaned from Render after model download to prevent memory overflow.
+        </p>
       </div>
 
       <div class="setup-card hud-panel coord-panel">
@@ -711,6 +740,27 @@
             </div>
           </div>
 
+          <!-- Epoch metrics panel (NEW — per-epoch loss/accuracy from SSE) -->
+          <div class="dash-panel hud-panel client-panel">
+            <div class="panel-head">
+              <h3 class="panel-title mono">LIVE TRAINING METRICS</h3>
+              <span class="live-ind">
+                <span class="live-dot live-dot-client"></span>
+                <span class="mono small-caps text-muted" style="font-size:10px">PER-EPOCH</span>
+              </span>
+            </div>
+            <div class="epoch-metrics-header mono">
+              <span>ROUND/EPOCH</span>
+              <span>LOSS</span>
+              <span>ACCURACY</span>
+              <span>SAMPLES</span>
+              <span>TIME</span>
+            </div>
+            <div class="epoch-metrics-scroll client-epoch-panel" id="client-epoch-panel">
+              <div class="epoch-metrics-empty mono text-muted">Waiting for training to begin…</div>
+            </div>
+          </div>
+
           <!-- Activity log -->
           <div class="dash-panel hud-panel client-panel">
             <div class="panel-head">
@@ -732,7 +782,7 @@
        ╚══════════════════════════════════════════════════════════╝ -->
   <div id="screen-agent-setup" class="screen setup-screen">
     <div class="setup-wrap">
-      <button class="back-link" onclick="showScreen('screen-client-dashboard')">← Dashboard</button>
+      <button class="back-link" onclick="S.role === 'coordinator' ? showScreen('screen-coord-dashboard') : showScreen('screen-client-dashboard')">← Dashboard</button>
       <h1 class="page-title">Background Agent Setup</h1>
       <p class="page-sub">Install the Net-Neutral AI agent to contribute GPU compute automatically when your machine is idle.</p>
 

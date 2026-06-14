@@ -1,7 +1,10 @@
 import os
+import glob
+import json
+import queue
 import datetime
 import torch
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, Response
 from flask_cors import CORS
 
 # Import internal modules
@@ -13,6 +16,27 @@ import threading
 
 # Global state lock for thread safety
 state_lock = threading.RLock()
+
+# --- SSE (Server-Sent Events) Infrastructure ---
+# Each connected browser gets its own queue; broadcast pushes to all.
+sse_clients = []   # list of queue.Queue
+sse_lock = threading.Lock()
+
+def broadcast_event(event_type: str, data: dict) -> None:
+    """Push an SSE event to every connected browser."""
+    payload = f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+    dead = []
+    with sse_lock:
+        for q in sse_clients:
+            try:
+                q.put_nowait(payload)
+            except queue.Full:
+                dead.append(q)
+        for q in dead:
+            sse_clients.remove(q)
+
+# In-memory store for per-epoch training data reported by clients
+epoch_reports = {}   # {client_id: [{epoch, loss, accuracy, samples, round}]}
 
 # Try to import supabase_sync (optional for cloud sync)
 try:
@@ -56,6 +80,7 @@ submitted_samples = {}
 client_registry = {}  # {client_id: {'data_received': False}} — session-scoped only
 data_shards = {}      # {client_id: DataFrame} - in-memory cache of divided data
 uploaded_dataset_path = os.path.join(COORDINATOR_DIR, 'uploaded_dataset.csv')
+model_downloaded = False  # Flag to track if coordinator has downloaded the final model
 
 # --- Evaluation Wrapper ---
 def run_evaluation_from_path(model_path: str, round_number: int) -> float:
@@ -113,6 +138,13 @@ def _process_round_completion(current_round_copy, round_start_time_copy, weights
         credits.log_round(current_round_copy, round_start_time_copy, result.clients_included, global_acc)
         board = credits.get_leaderboard()
 
+        # Broadcast accuracy update via SSE
+        broadcast_event('accuracy_update', {
+            'round': current_round_copy,
+            'accuracy': global_acc,
+            'clients_submitted': result.clients_included,
+        })
+
         if current_round_copy >= TOTAL_ROUNDS:
             print(credits.format_final_leaderboard(board))
         else:
@@ -137,6 +169,10 @@ def _process_round_completion(current_round_copy, round_start_time_copy, weights
         with state_lock:
             round_status = 'done'
         print("\n[Coordinator] Training complete! Final leaderboard ready.")
+        broadcast_event('training_done', {
+            'final_accuracy': global_acc,
+            'total_rounds': TOTAL_ROUNDS,
+        })
 
         # Sync credits to central Supabase database
         if SUPABASE_SYNC_AVAILABLE:
@@ -153,6 +189,10 @@ def _process_round_completion(current_round_copy, round_start_time_copy, weights
             round_status = 'active'
             round_start_time = datetime.datetime.now()
         print(f"\n[Coordinator] Ready for Round {current_round}")
+        broadcast_event('round_start', {
+            'round': current_round,
+            'status': 'active',
+        })
 
 def check_round_completion():
     global current_round, round_status, global_accuracy, round_start_time
@@ -202,6 +242,13 @@ def register():
         client_registry[client_id] = {'data_received': False}
 
     print(f"[Coordinator] Node Registered: {client_id} from {client_ip}")
+
+    # Broadcast client join via SSE
+    broadcast_event('client_joined', {
+        'client_id': client_id,
+        'ip': client_ip,
+        'total_clients': len(registered_clients),
+    })
 
     return jsonify({'status': 'ok', 'round': current_round})
 
@@ -268,11 +315,21 @@ def submit():
 
 @app.route('/status', methods=['GET'])
 def status():
-    """Polled every 5 seconds by clients to check state machine [cite: 1, 120-121]."""
+    """Polled every 5 seconds by clients to check state machine."""
+    # Include leaderboard data for the live training view
+    lb = credits.get_leaderboard_dicts()
     return jsonify({
         'round': current_round,
         'round_status': round_status,
-        'active_clients': list(registered_clients)
+        'active_clients': list(registered_clients),
+        'global_accuracy': global_accuracy,
+        'total_rounds': TOTAL_ROUNDS,
+        'leaderboard': lb,
+        'clients': [
+            {'id': cid, 'ip': credits.get_client(cid).ip_address if credits.get_client(cid) else 'unknown'}
+            for cid in registered_clients
+        ],
+        'epoch_reports': epoch_reports,
     })
 
 @app.route('/results', methods=['GET'])
@@ -297,13 +354,14 @@ def api_config():
 
 @app.route('/api/client_status/<client_id>', methods=['GET'])
 def api_client_status(client_id):
-    """Returns individual client's credits and round participation."""
+    """Returns individual client's credits, round participation, and history."""
     client = credits.get_client(client_id)
     if client is None:
         return jsonify({'error': f'Client {client_id} not found'}), 404
 
     total_credits = credits.get_client_total_credits(client_id)
     submitted = credits.get_submitted_clients(current_round)
+    round_history = credits.get_round_history(client_id)
 
     return jsonify({
         'client_id': client_id,
@@ -315,6 +373,8 @@ def api_client_status(client_id):
         'total_rounds': TOTAL_ROUNDS,
         'has_submitted_this_round': client_id in submitted,
         'global_accuracy': global_accuracy,
+        'round_history': round_history,
+        'epoch_reports': epoch_reports.get(client_id, []),
     })
 
 
@@ -452,6 +512,165 @@ def get_data_shard():
         return jsonify({'error': str(e)}), 400
 
 
+# --- NEW ENDPOINTS: Model Download, Leaderboard, Stats, SSE, Epoch Reports ---
+
+@app.route('/download_model', methods=['GET'])
+def download_model():
+    """Download the trained global model. Triggers session cleanup after download."""
+    if not os.path.exists(MODEL_PATH):
+        return jsonify({'error': 'Model not available'}), 503
+
+    global model_downloaded
+    model_downloaded = True
+    print("[Coordinator] Model download requested — sending checkpoint.pt")
+
+    # Schedule cleanup after a short delay to let the download complete
+    def delayed_cleanup():
+        import time
+        time.sleep(5)  # Wait for download stream to finish
+        cleanup_session_data()
+
+    threading.Thread(target=delayed_cleanup, daemon=True).start()
+
+    return send_file(MODEL_PATH, as_attachment=True,
+                     download_name='net_neutral_trained_model.pt')
+
+
+def cleanup_session_data():
+    """Delete all session-specific data from Render to stay under 512MB.
+
+    Keeps: credits database (persistent leaderboard), pretrained backup.
+    Deletes: uploaded datasets, temp weight files, data shards, test splits.
+    """
+    print("[Coordinator] Starting session cleanup to free Render memory...")
+    cleaned = []
+
+    # 1. Delete uploaded dataset
+    if os.path.exists(uploaded_dataset_path):
+        os.remove(uploaded_dataset_path)
+        cleaned.append('uploaded_dataset.csv')
+
+    # 2. Delete test split
+    test_csv = os.path.join(COORDINATOR_DIR, 'uploaded_test.csv')
+    if os.path.exists(test_csv):
+        os.remove(test_csv)
+        cleaned.append('uploaded_test.csv')
+
+    # 3. Delete all temp weight files
+    for f in glob.glob(os.path.join(COORDINATOR_DIR, 'temp_*.pt')):
+        os.remove(f)
+        cleaned.append(os.path.basename(f))
+
+    # 4. Delete the trained checkpoint (coordinator already downloaded it)
+    # Keep the pretrained backup for next session
+    if os.path.exists(MODEL_PATH):
+        PRETRAINED_BACKUP = os.path.join(COORDINATOR_DIR, 'checkpoint_pretrained_backup.pt')
+        if os.path.exists(PRETRAINED_BACKUP):
+            # Safe to delete — can be restored from backup on next startup
+            os.remove(MODEL_PATH)
+            cleaned.append('checkpoint.pt')
+
+    # 5. Clear in-memory caches
+    data_shards.clear()
+    epoch_reports.clear()
+
+    print(f"[Coordinator] Session cleanup complete. Removed: {', '.join(cleaned) or 'nothing'}")
+    broadcast_event('session_cleanup', {'files_removed': cleaned})
+
+
+@app.route('/leaderboard', methods=['GET'])
+def leaderboard():
+    """Public leaderboard — returns lifetime credits for all clients."""
+    lb = credits.get_leaderboard_dicts()
+    return jsonify({'leaderboard': lb})
+
+
+@app.route('/stats', methods=['GET'])
+def stats():
+    """Public stats for landing page stats bar."""
+    return jsonify(credits.get_stats())
+
+
+@app.route('/report_epoch', methods=['POST'])
+def report_epoch():
+    """Receive per-epoch training metrics from a client.
+
+    Called by client.py after each local training epoch to surface
+    rich training data (loss, accuracy) in the web dashboard.
+    """
+    data = request.get_json()
+    client_id = data.get('client_id')
+    if not client_id:
+        return jsonify({'error': 'client_id missing'}), 400
+
+    epoch_data = {
+        'epoch':    data.get('epoch', 0),
+        'loss':     data.get('loss', 0.0),
+        'accuracy': data.get('accuracy', 0.0),
+        'samples':  data.get('samples', 0),
+        'round':    data.get('round', current_round),
+        'timestamp': datetime.datetime.now().strftime('%H:%M:%S'),
+    }
+
+    if client_id not in epoch_reports:
+        epoch_reports[client_id] = []
+    epoch_reports[client_id].append(epoch_data)
+
+    # Broadcast via SSE for real-time dashboard updates
+    broadcast_event('epoch_update', {
+        'client_id': client_id,
+        **epoch_data,
+    })
+
+    return jsonify({'status': 'ok'})
+
+
+@app.route('/events')
+def sse_stream():
+    """Server-Sent Events endpoint for real-time updates.
+
+    Browsers connect via EventSource and receive live training events
+    without polling. Falls back to /status polling if SSE unavailable.
+    """
+    def stream():
+        q = queue.Queue(maxsize=50)
+        with sse_lock:
+            sse_clients.append(q)
+        try:
+            # Send initial state
+            init_data = json.dumps({
+                'round': current_round,
+                'round_status': round_status,
+                'global_accuracy': global_accuracy,
+                'clients': list(registered_clients),
+            })
+            yield f"event: init\ndata: {init_data}\n\n"
+
+            while True:
+                try:
+                    msg = q.get(timeout=30)
+                    yield msg
+                except queue.Empty:
+                    # Send keepalive to prevent connection timeout
+                    yield ": keepalive\n\n"
+        except GeneratorExit:
+            pass
+        finally:
+            with sse_lock:
+                if q in sse_clients:
+                    sse_clients.remove(q)
+
+    return Response(
+        stream(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+            'Connection': 'keep-alive',
+        },
+    )
+
+
 @app.route('/')
 def serve_frontend():
     """Serve frontend HTML."""
@@ -460,7 +679,7 @@ def serve_frontend():
     if os.path.exists(frontend_path):
         return send_file(frontend_path)
     # In production if frontend not found, return API health instead of 404
-    return jsonify({'status': 'ok', 'service': 'Net-Neutral AI Coordinator', 'version': '2.1'}), 200
+    return jsonify({'status': 'ok', 'service': 'Net-Neutral AI Coordinator', 'version': '2.2'}), 200
 
 if __name__ == '__main__':
     

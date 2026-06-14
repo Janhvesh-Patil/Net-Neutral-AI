@@ -514,6 +514,75 @@ def get_submitted_clients(round_num: int, db_path: str = DB_PATH) -> List[str]:
     return [row[0] for row in rows]
 
 
+def get_round_history(
+    client_id: str,
+    db_path:   str = DB_PATH,
+) -> List[Dict]:
+    """Return per-round breakdown for a specific client (for client dashboard)."""
+    conn   = _connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT c.round, c.samples_trained, c.time_seconds, c.points_earned,
+               r.global_accuracy, c.timestamp
+        FROM credits c
+        LEFT JOIN rounds r ON c.round = r.round_number
+        WHERE c.client_id = ?
+        ORDER BY c.round ASC
+    """, (client_id,))
+    rows = cursor.fetchall()
+    conn.close()
+
+    return [
+        {
+            'round':           row[0],
+            'samples_trained': row[1],
+            'time_seconds':    row[2],
+            'points_earned':   row[3],
+            'global_accuracy': row[4],
+            'timestamp':       row[5],
+        }
+        for row in rows
+    ]
+
+
+def get_stats(db_path: str = DB_PATH) -> Dict:
+    """Return aggregate stats for landing page stats bar."""
+    conn   = _connect(db_path)
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT COUNT(*) FROM clients WHERE is_active = 1")
+    nodes = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COALESCE(SUM(samples_trained), 0) FROM credits")
+    total_samples = cursor.fetchone()[0]
+
+    # Active jobs = 1 if training is in progress (rounds exist but not all done)
+    cursor.execute("SELECT COUNT(*) FROM rounds")
+    rounds_count = cursor.fetchone()[0]
+
+    conn.close()
+
+    return {
+        'nodes_connected': nodes,
+        'total_compute':   total_samples,
+        'active_jobs':     1 if rounds_count > 0 else 0,
+    }
+
+
+def get_leaderboard_dicts(db_path: str = DB_PATH) -> List[Dict]:
+    """Return leaderboard as list of dicts (JSON-serializable)."""
+    entries = get_leaderboard(db_path)
+    return [
+        {
+            'client_id':           e.client_id,
+            'total_points':        e.total_points,
+            'total_samples':       e.total_samples,
+            'rounds_participated': e.rounds_participated,
+        }
+        for e in entries
+    ]
+
+
 def get_round_credits(
     round_num: int,
     db_path:   str = DB_PATH,

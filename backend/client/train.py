@@ -55,6 +55,7 @@ def train_one_round(
     total_rounds: int,
     epochs:      int = LOCAL_EPOCHS,
     lr:          float = LEARNING_RATE,
+    epoch_callback=None,
 ) -> Tuple[Dict[str, torch.Tensor], int, float, float]:
     """
     Run one federated training round — train for `epochs` epochs on local data.
@@ -67,6 +68,8 @@ def train_one_round(
         total_rounds : total rounds in session
         epochs       : number of local epochs per round
         lr           : learning rate for Adam optimiser
+        epoch_callback : optional callable(epoch, avg_loss, accuracy, samples)
+                         called after each epoch for dashboard reporting
 
     Returns:
         state_dict      : updated model weights after local training
@@ -145,6 +148,13 @@ def train_one_round(
         _row("Local accuracy",    f"{accuracy:.2f}%")
         _row("Samples processed", f"{total:,}")
         _row("Epoch time",        f"{epoch_time:.1f}s")
+
+        # Report epoch metrics to coordinator for dashboard
+        if epoch_callback:
+            try:
+                epoch_callback(epoch, avg_loss, accuracy, total)
+            except Exception:
+                pass  # Non-critical — don't break training if callback fails
 
     # ── Round complete ────────────────────────────────────────────────────────
     time_seconds = time.time() - start_time

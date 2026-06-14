@@ -295,6 +295,24 @@ def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
             model = load_weights(model_path, model)
             print_status("[OK] Global model loaded")
 
+            # Epoch callback: report per-epoch metrics to coordinator for dashboard
+            def epoch_callback(epoch, avg_loss, accuracy, samples):
+                try:
+                    requests.post(
+                        f"{config.BASE_URL}/report_epoch",
+                        json={
+                            'client_id': client_id,
+                            'epoch':     epoch,
+                            'loss':      round(avg_loss, 4),
+                            'accuracy':  round(accuracy, 2),
+                            'samples':   samples,
+                            'round':     round_num,
+                        },
+                        timeout=5,
+                    )
+                except Exception:
+                    pass  # Non-critical — don't interrupt training
+
             state_dict, samples_trained, time_seconds, final_loss = train_one_round(
                 model=model,
                 dataloader=dataloader,
@@ -303,6 +321,7 @@ def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
                 total_rounds=config.TOTAL_ROUNDS,
                 epochs=config.LOCAL_EPOCHS,
                 lr=config.LEARNING_RATE,
+                epoch_callback=epoch_callback,
             )
 
             weights_temp = tempfile.NamedTemporaryFile(suffix='.pt', delete=False)

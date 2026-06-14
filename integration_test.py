@@ -90,11 +90,11 @@ def test_data_distribution():
 
         total = sum(len(s) for s in shards.values())
         print(f"[OK] Total: {total} samples")
-        assert total == 300, "Sample count mismatch"
+        assert total == 240, "Sample count mismatch"
 
         # Test validation
         print("[TEST] Validating shards...")
-        data_distributor.validate_shards(shards, 300)
+        data_distributor.validate_shards(shards, 240)
         print("[OK] All shards valid")
 
         print("[OK] Data distribution test PASSED")

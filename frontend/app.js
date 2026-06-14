@@ -98,6 +98,125 @@ function stopAllPolling() {
   clearInterval(S.pollClient);
   S.pollCoord = S.pollClient = null;
   if (netGraph) { netGraph.stop(); netGraph = null; }
+  if (S.eventSource) { S.eventSource.close(); S.eventSource = null; }
+}
+
+
+// ════════════════════════════════════════════════════════════════
+//  SSE (Server-Sent Events) REAL-TIME CONNECTION
+// ════════════════════════════════════════════════════════════════
+
+function connectSSE() {
+  if (S.eventSource) { S.eventSource.close(); }
+
+  try {
+    const es = new EventSource(S.coordURL + '/events');
+    S.eventSource = es;
+
+    es.addEventListener('init', (e) => {
+      const d = JSON.parse(e.data);
+      handleStatusUpdate(d);
+    });
+
+    es.addEventListener('status_update', (e) => {
+      const d = JSON.parse(e.data);
+      handleStatusUpdate(d);
+    });
+
+    es.addEventListener('round_start', (e) => {
+      const d = JSON.parse(e.data);
+      liveLog(`Round ${d.round} — clients training locally…`, 'round');
+      setText('live-round', d.round);
+      el('live-status-pill').textContent = fmtStatus('active');
+      if (netGraph) netGraph.spawnPackets('in');
+    });
+
+    es.addEventListener('accuracy_update', (e) => {
+      const d = JSON.parse(e.data);
+      if (d.accuracy > 0) {
+        const pct = normPct(d.accuracy);
+        setText('live-acc-readout', pct.toFixed(1) + '%');
+        pushAccuracyPoint(d.round, d.accuracy);
+        liveLog(`Round ${d.round} — accuracy: ${pct.toFixed(2)}%`, 'info');
+      }
+      if (netGraph) netGraph.spawnPackets('out');
+    });
+
+    es.addEventListener('training_done', (e) => {
+      const d = JSON.parse(e.data);
+      liveLog('All rounds complete. Training finished.', 'done');
+      liveLog(`Final accuracy: ${normPct(d.final_accuracy).toFixed(2)}%`, 'done');
+      el('live-status-pill').textContent = fmtStatus('done');
+      onTrainingDone({
+        global_accuracy: d.final_accuracy,
+        round: d.total_rounds,
+      });
+    });
+
+    es.addEventListener('client_joined', (e) => {
+      const d = JSON.parse(e.data);
+      liveLog(`${d.client_id} joined (${d.total_clients} total)`, 'info');
+      if (netGraph) netGraph.setClients([d.client_id]);
+    });
+
+    es.addEventListener('epoch_update', (e) => {
+      const d = JSON.parse(e.data);
+      updateEpochMetrics(d);
+    });
+
+    es.addEventListener('session_cleanup', (e) => {
+      const d = JSON.parse(e.data);
+      liveLog(`Session cleanup: ${d.files_removed.length} files freed`, 'info');
+    });
+
+    es.onerror = () => {
+      console.warn('SSE connection lost — falling back to polling');
+      es.close();
+      S.eventSource = null;
+      // Fallback to polling
+      startLivePolling();
+    };
+
+  } catch {
+    // SSE not supported — fall back to polling
+    startLivePolling();
+  }
+}
+
+function handleStatusUpdate(d) {
+  setText('live-round', d.round ?? '—');
+  if (d.total_rounds) setText('live-total', d.total_rounds);
+  el('live-status-pill').textContent = fmtStatus(d.round_status);
+  if (d.global_accuracy > 0) {
+    setText('live-acc-readout', normPct(d.global_accuracy).toFixed(1) + '%');
+  }
+  // Update network graph
+  if (netGraph && d.clients) {
+    const ids = d.clients.map ? d.clients.map(c => c.id || c) : d.clients;
+    if (ids.length) netGraph.setClients(ids);
+  }
+}
+
+function updateEpochMetrics(d) {
+  // Update the epoch metrics panel in client/live dashboard
+  const panel = el('epoch-metrics-panel');
+  if (!panel) return;
+
+  panel.style.display = 'block';
+  const row = document.createElement('div');
+  row.className = 'epoch-metric-row slide-up';
+  row.innerHTML = `
+    <span class="mono" style="color:var(--muted)">R${d.round} E${d.epoch}</span>
+    <span class="mono">Loss: <strong style="color:${d.loss < 0.5 ? 'var(--coord)' : 'var(--warn, #ff6b6b)'}">${d.loss.toFixed(4)}</strong></span>
+    <span class="mono">Acc: <strong style="color:var(--client)">${d.accuracy.toFixed(1)}%</strong></span>
+    <span class="mono text-muted">${d.samples?.toLocaleString() || '—'} samples</span>
+    <span class="mono text-muted">${d.timestamp || ''}</span>`;
+  panel.appendChild(row);
+  panel.scrollTop = panel.scrollHeight;
+
+  // Cap at 50 entries
+  const rows = panel.querySelectorAll('.epoch-metric-row');
+  if (rows.length > 50) rows[0].remove();
 }
 
 
@@ -494,7 +613,8 @@ async function submitJob() {
 function initLiveView() {
   initAccuracyChart();
   initNetworkCanvas();
-  startLivePolling();
+  // Try SSE first, fall back to polling
+  connectSSE();
 }
 
 // ── Chart.js Accuracy Chart ───────────────────────────────────
@@ -1221,60 +1341,81 @@ function selectOS(os) {
    * Agent auth: agent stores Supabase JWT locally after first sign-in
    * via web platform. Token is refreshed automatically by supabase-py.
    */
+  const isCoord = S.role === 'coordinator';
+  const repoDir = isCoord ? 'backend/coordinator' : 'backend/client';
+  
+  let winRunCmd = isCoord 
+    ? `python server.py` 
+    : `python client.py --client_id ${cid} --coordinator_url ${url}`;
+    
+  let macRunCmd = isCoord 
+    ? `python3 server.py` 
+    : `python3 client.py --client_id ${cid} --coordinator_url ${url}`;
+    
+  let reqText = isCoord
+    ? `Requirements: Python 3.12 · PyTorch 2.3 · Flask`
+    : `Requirements: Python 3.12 · PyTorch 2.3 · psutil · GPUtil`;
+
+  let installSteps = isCoord ? '' : `
+        <div class="agent-step"><span class="agent-step-n">5.</span> (Optional) Install as background service</div>
+        <pre class="codeblock">install\\install_windows.bat</pre>`;
+
+  let macInstallSteps = isCoord ? '' : `
+        <div class="agent-step"><span class="agent-step-n">3.</span> (Optional) Install as launchd service</div>
+        <pre class="codeblock">bash install/install_mac.sh
+launchctl load ~/Library/LaunchAgents/ai.netneutral.agent.plist</pre>`;
+
+  let linInstallSteps = isCoord ? '' : `
+        <div class="agent-step"><span class="agent-step-n">3.</span> (Optional) Install as systemd user service</div>
+        <pre class="codeblock">bash install/install_linux.sh
+systemctl --user enable netneutral-agent
+systemctl --user start netneutral-agent</pre>`;
+
   const guides = {
     windows: `
       <div class="setup-card hud-panel client-panel">
         <h3 class="card-title">Windows Installation</h3>
         <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
-          Requirements: Python 3.12 · PyTorch 2.3 · psutil · GPUtil
+          ${reqText}
         </p>
         <div class="agent-step"><span class="agent-step-n">1.</span> Clone the repository</div>
         <pre class="codeblock">git clone https://github.com/Janhvesh-Patil/Net-Neutral-AI.git -b testing_site
-cd Net-Neutral-AI/backend/client</pre>
+cd Net-Neutral-AI/${repoDir}</pre>
         <div class="agent-step"><span class="agent-step-n">2.</span> Install dependencies</div>
         <pre class="codeblock">pip install -r requirements.txt</pre>
-        <div class="agent-step"><span class="agent-step-n">3.</span> Set coordinator URL in config.py</div>
+        ${!isCoord ? `<div class="agent-step"><span class="agent-step-n">3.</span> Set coordinator URL in config.py</div>
         <pre class="codeblock">COORDINATOR_URL = "${url}"
 CLIENT_ID       = "${cid}"</pre>
-        <div class="agent-step"><span class="agent-step-n">4.</span> Run manually</div>
-        <pre class="codeblock">python client.py --client_id ${cid} --coordinator_url ${url}</pre>
-        <div class="agent-step"><span class="agent-step-n">5.</span> (Optional) Install as background service via Task Scheduler</div>
-        <pre class="codeblock">install\\install_windows.bat</pre>
+        <div class="agent-step"><span class="agent-step-n">4.</span> Run manually</div>` : `<div class="agent-step"><span class="agent-step-n">3.</span> Run manually</div>`}
+        <pre class="codeblock">${winRunCmd}</pre>${installSteps}
       </div>`,
 
     mac: `
       <div class="setup-card hud-panel client-panel">
         <h3 class="card-title">macOS Installation</h3>
         <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
-          Requirements: Python 3.12 · PyTorch 2.3 · psutil
+          ${reqText}
         </p>
         <div class="agent-step"><span class="agent-step-n">1.</span> Clone & install</div>
         <pre class="codeblock">git clone https://github.com/Janhvesh-Patil/Net-Neutral-AI.git -b testing_site
-cd Net-Neutral-AI/backend/client
+cd Net-Neutral-AI/${repoDir}
 pip3 install -r requirements.txt</pre>
         <div class="agent-step"><span class="agent-step-n">2.</span> Run manually</div>
-        <pre class="codeblock">python3 client.py --client_id ${cid} --coordinator_url ${url}</pre>
-        <div class="agent-step"><span class="agent-step-n">3.</span> (Optional) Install as launchd service</div>
-        <pre class="codeblock">bash install/install_mac.sh
-launchctl load ~/Library/LaunchAgents/ai.netneutral.agent.plist</pre>
+        <pre class="codeblock">${macRunCmd}</pre>${macInstallSteps}
       </div>`,
 
     linux: `
       <div class="setup-card hud-panel client-panel">
         <h3 class="card-title">Linux Installation</h3>
         <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
-          Requirements: Python 3.12 · PyTorch 2.3 · psutil · nvidia-smi (for GPU)
+          ${reqText}
         </p>
         <div class="agent-step"><span class="agent-step-n">1.</span> Clone & install</div>
         <pre class="codeblock">git clone https://github.com/Janhvesh-Patil/Net-Neutral-AI.git -b testing_site
-cd Net-Neutral-AI/backend/client
+cd Net-Neutral-AI/${repoDir}
 pip3 install -r requirements.txt</pre>
         <div class="agent-step"><span class="agent-step-n">2.</span> Run manually</div>
-        <pre class="codeblock">python3 client.py --client_id ${cid} --coordinator_url ${url}</pre>
-        <div class="agent-step"><span class="agent-step-n">3.</span> (Optional) Install as systemd user service</div>
-        <pre class="codeblock">bash install/install_linux.sh
-systemctl --user enable netneutral-agent
-systemctl --user start netneutral-agent</pre>
+        <pre class="codeblock">${macRunCmd}</pre>${linInstallSteps}
       </div>`,
   };
 

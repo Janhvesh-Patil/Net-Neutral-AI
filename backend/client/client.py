@@ -198,6 +198,18 @@ def download_data_shard(client_id: str, save_path: str, max_retries: int = 3) ->
 
 def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
 
+    # ── Step 0: Fetch dynamic config from coordinator ─────────────────────────
+    try:
+        resp = requests.get(f"{config.BASE_URL}/api/config", timeout=5)
+        resp.raise_for_status()
+        srv_cfg = resp.json()
+        if 'total_rounds' in srv_cfg:
+            config.TOTAL_ROUNDS = srv_cfg['total_rounds']
+        if 'epochs' in srv_cfg:
+            config.LOCAL_EPOCHS = srv_cfg['epochs']
+    except Exception as e:
+        print_status(f"[WARNING] Could not fetch server config: {e}. Using defaults.")
+
     print_banner(client_id)
 
     # ── Step 1: Register with coordinator ─────────────────────────────────────

@@ -64,9 +64,11 @@ MODEL_PATH = os.path.join(COORDINATOR_DIR, 'checkpoint.pt')
 # --- Global State Machine ---
 current_round = 1
 TOTAL_ROUNDS = 5
+LOCAL_EPOCHS = 2
 registered_clients = set()
 round_status = 'waiting_for_clients'
 global_accuracy = 0.0
+accuracy_history = []  # List of dicts: [{'round': r, 'accuracy': acc}]
 round_start_time = datetime.datetime.now()
 
 # Dictionaries to track submissions
@@ -115,6 +117,7 @@ def _process_round_completion(current_round_copy, round_start_time_copy, weights
     global current_round, round_status, global_accuracy, round_start_time
 
     print(f"\n--- All clients submitted for round {current_round_copy}. Running FedAvg ---")
+    broadcast_event('sys_log', {'message': f'Received weights from all clients. Transferring to aggregator for round {current_round_copy}...', 'level': 'info'})
 
     client_weights = {}
     for cid, fpath in weights_copy.items():
@@ -126,10 +129,12 @@ def _process_round_completion(current_round_copy, round_start_time_copy, weights
 
     try:
         # 1. Run FedAvg
+        broadcast_event('sys_log', {'message': 'Starting Federated Averaging (FedAvg)...', 'level': 'info'})
         result = fedavg.federated_average(client_weights, client_samples=samples_copy)
 
         # 2. Save using the absolute MODEL_PATH
         fedavg.save_global_model(result.global_state_dict, MODEL_PATH)
+        broadcast_event('sys_log', {'message': 'FedAvg complete. New global model generated.', 'level': 'info'})
 
         # 3. Evaluate the new global model
         global_acc = run_evaluation_from_path(MODEL_PATH, current_round_copy)
@@ -153,6 +158,10 @@ def _process_round_completion(current_round_copy, round_start_time_copy, weights
         # Update global accuracy safely
         with state_lock:
             global_accuracy = global_acc
+            accuracy_history.append({
+                'round': current_round_copy,
+                'accuracy': global_acc
+            })
 
     except fedavg.FedAvgError as e:
         print(f"[Coordinator] ⚠ FedAvg failed: {e}")
@@ -323,6 +332,7 @@ def status():
         'round_status': round_status,
         'active_clients': list(registered_clients),
         'global_accuracy': global_accuracy,
+        'accuracy_history': accuracy_history,
         'total_rounds': TOTAL_ROUNDS,
         'leaderboard': lb,
         'clients': [
@@ -343,12 +353,13 @@ def results():
 
 @app.route('/api/config', methods=['GET'])
 def api_config():
-    """Returns server configuration for the frontend."""
+    """Returns server configuration for the frontend and clients."""
     return jsonify({
         'max_clients': 3,
         'total_rounds': TOTAL_ROUNDS,
         'current_round': current_round,
         'round_status': round_status,
+        'epochs': LOCAL_EPOCHS
     })
 
 
@@ -431,10 +442,22 @@ def get_clients():
 @app.route('/start_training', methods=['POST'])
 def start_training():
     """Frontend signals to begin data distribution."""
-    global round_status, data_shards
+    global round_status, data_shards, TOTAL_ROUNDS, LOCAL_EPOCHS
 
     data = request.get_json()
     num_clients = data.get('client_count')
+    
+    if 'rounds' in data:
+        try:
+            TOTAL_ROUNDS = int(data['rounds'])
+        except ValueError:
+            pass
+            
+    if 'epochs' in data:
+        try:
+            LOCAL_EPOCHS = int(data['epochs'])
+        except ValueError:
+            pass
 
     if not num_clients or num_clients < 1:
         return jsonify({'error': 'Invalid client_count'}), 400
@@ -642,6 +665,7 @@ def sse_stream():
                 'round': current_round,
                 'round_status': round_status,
                 'global_accuracy': global_accuracy,
+                'accuracy_history': accuracy_history,
                 'clients': list(registered_clients),
             })
             yield f"event: init\ndata: {init_data}\n\n"

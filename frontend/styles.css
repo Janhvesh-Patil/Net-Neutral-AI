@@ -1062,6 +1062,36 @@ button {
   min-height: 0;
 }
 
+/* Epoch Tabs */
+.epoch-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 0 16px 12px 16px;
+  border-bottom: 1px solid var(--coord-border);
+  margin-bottom: 12px;
+  overflow-x: auto;
+}
+.epoch-tab {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 4px 12px;
+  border-radius: var(--r-sm);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.epoch-tab:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.epoch-tab.active {
+  background: var(--coord-dim);
+  border-color: var(--coord);
+  color: var(--coord);
+}
+
 /* Chart */
 .chart-wrap {
   flex: 1;

@@ -8,6 +8,13 @@ import pandas as pd
 
 def main():
     print("Starting Coordinator Server...")
+    db_path = "backend/coordinator/database.db"
+    if os.path.exists(db_path):
+        os.remove(db_path)
+    import shutil
+    local_data_dir = "local_data"
+    if os.path.exists(local_data_dir):
+        shutil.rmtree(local_data_dir)
     server_process = subprocess.Popen(
         [sys.executable, "backend/coordinator/server.py"],
         env=dict(os.environ, PORT="5000", PYTHONIOENCODING="utf-8")
@@ -47,11 +54,20 @@ def main():
         env=dict(os.environ, PYTHONIOENCODING="utf-8")
     )
     
-    # Wait for client to register
-    time.sleep(3)
+    # Wait for client to register (poll until it appears)
+    print("Waiting for client to register...")
+    for _ in range(30):
+        try:
+            r = requests.get(f"{base_url}/get_clients")
+            clients = r.json().get("clients", [])
+            if any(c.get("id") == "client_A" for c in clients):
+                break
+        except:
+            pass
+        time.sleep(1)
     
     print("Starting training...")
-    resp = requests.post(f"{base_url}/start_training", json={"client_count": 1})
+    resp = requests.post(f"{base_url}/start_training", json={"client_count": 1, "rounds": 2, "epochs": 2})
     print(f"Start training response: {resp.json()}")
     
     print("Waiting for client to complete training (timeout 120s)...")

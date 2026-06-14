@@ -248,6 +248,29 @@
 
 
   <!-- ╔══════════════════════════════════════════════════════════╗
+       ║  MODAL — COORDINATOR MODE SELECT                        ║
+       ╚══════════════════════════════════════════════════════════╝ -->
+  <div id="modal-coord-mode" class="modal-overlay" style="display:none">
+    <div class="modal-content hud-panel coord-panel">
+      <h2 class="auth-title">Coordinator Mode</h2>
+      <p class="auth-sub" style="margin-bottom:20px;">Where is the coordinator server running?</p>
+      <div class="role-picker">
+        <div class="role-pick-opt coord-opt" onclick="selectCoordMode('online')">
+          <span class="pick-icon">☁️</span>
+          <span class="pick-name">Online (Render)</span>
+          <span class="pick-hint">Skip setup, server is cloud-hosted</span>
+        </div>
+        <div class="role-pick-opt coord-opt" onclick="selectCoordMode('local')">
+          <span class="pick-icon">🖥️</span>
+          <span class="pick-name">Local Machine</span>
+          <span class="pick-hint">Run Python server on this PC</span>
+        </div>
+      </div>
+      <button class="btn-ghost btn-block" style="margin-top:12px" onclick="document.getElementById('modal-coord-mode').style.display='none'">Cancel</button>
+    </div>
+  </div>
+
+  <!-- ╔══════════════════════════════════════════════════════════╗
        ║  SCREEN 5 — COORDINATOR DASHBOARD                       ║
        ╚══════════════════════════════════════════════════════════╝ -->
   <div id="screen-coord-dashboard" class="screen dash-screen">
@@ -535,18 +558,23 @@
             <span class="mono small-caps" style="font-size:10px;color:var(--muted)">REAL-TIME</span>
           </span>
         </div>
-        <div class="epoch-metrics-header mono">
-          <span>ROUND/EPOCH</span>
-          <span>LOSS</span>
-          <span>ACCURACY</span>
-          <span>SAMPLES</span>
-          <span>TIME</span>
+        
+        <div class="epoch-tabs mono" id="epoch-tabs">
+          <!-- Populated by SSE rounds -->
+          <button class="epoch-tab active" data-round="1">Round 1</button>
         </div>
-        <div class="epoch-metrics-scroll" id="epoch-metrics-panel" style="display:none">
-          <!-- Populated by SSE epoch_update events via updateEpochMetrics() -->
+
+        <div class="epoch-metrics-header mono" style="margin-top:0">
+          <span style="flex:0.5">EPOCH</span>
+          <span style="flex:1">CLIENT</span>
+          <span style="flex:1">LOSS</span>
+          <span style="flex:1">ACCURACY</span>
+          <span style="flex:1">SAMPLES</span>
         </div>
-        <div class="epoch-metrics-empty mono text-muted" id="epoch-metrics-empty">
-          Waiting for epoch data from training clients…
+        <div class="epoch-metrics-scroll" id="epoch-metrics-panel" style="display:block">
+          <div class="epoch-metrics-empty mono text-muted" id="epoch-metrics-empty">
+            Waiting for epoch data from training clients…
+          </div>
         </div>
       </div>
 
@@ -740,26 +768,7 @@
             </div>
           </div>
 
-          <!-- Epoch metrics panel (NEW — per-epoch loss/accuracy from SSE) -->
-          <div class="dash-panel hud-panel client-panel">
-            <div class="panel-head">
-              <h3 class="panel-title mono">LIVE TRAINING METRICS</h3>
-              <span class="live-ind">
-                <span class="live-dot live-dot-client"></span>
-                <span class="mono small-caps text-muted" style="font-size:10px">PER-EPOCH</span>
-              </span>
-            </div>
-            <div class="epoch-metrics-header mono">
-              <span>ROUND/EPOCH</span>
-              <span>LOSS</span>
-              <span>ACCURACY</span>
-              <span>SAMPLES</span>
-              <span>TIME</span>
-            </div>
-            <div class="epoch-metrics-scroll client-epoch-panel" id="client-epoch-panel">
-              <div class="epoch-metrics-empty mono text-muted">Waiting for training to begin…</div>
-            </div>
-          </div>
+          <!-- Epoch metrics panel removed from client dashboard -->
 
           <!-- Activity log -->
           <div class="dash-panel hud-panel client-panel">
@@ -793,6 +802,9 @@
       </div>
 
       <div id="agent-guide"><!-- Populated by selectOS() --></div>
+      <button class="btn-coord btn-block" id="btn-agent-continue" style="display:none; margin-top:20px" onclick="showScreen(S.role === 'coordinator' ? 'screen-coord-setup' : 'screen-client-setup')">
+        Continue →
+      </button>
     </div>
   </div><!-- /screen-agent-setup -->
 

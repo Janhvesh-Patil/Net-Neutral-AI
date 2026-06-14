@@ -81,7 +81,22 @@ function showScreen(id) {
 
 function selectRoleAndGo(role) {
   S.role = role;
-  showScreen(role === 'coordinator' ? 'screen-coord-setup' : 'screen-client-setup');
+  if (role === 'coordinator') {
+    document.getElementById('modal-coord-mode').style.display = 'flex';
+  } else {
+    showScreen('screen-client-discovery');
+    pollCoordinatorForClient();
+  }
+}
+
+function selectCoordMode(mode) {
+  document.getElementById('modal-coord-mode').style.display = 'none';
+  if (mode === 'local') {
+    el('btn-agent-continue').style.display = 'block';
+    showScreen('screen-agent-setup');
+  } else {
+    showScreen('screen-coord-setup');
+  }
 }
 
 function goToLive() {
@@ -190,6 +205,21 @@ function handleStatusUpdate(d) {
   if (d.global_accuracy > 0) {
     setText('live-acc-readout', normPct(d.global_accuracy).toFixed(1) + '%');
   }
+  
+  // Render full accuracy history
+  if (d.accuracy_history && d.accuracy_history.length > 0 && accChart) {
+    accChart.data.labels = [];
+    accChart.data.datasets[0].data = [];
+    S.accuracyHistory = [];
+    d.accuracy_history.forEach(pt => {
+      const pct = parseFloat(normPct(pt.accuracy).toFixed(2));
+      S.accuracyHistory.push({ round: pt.round, acc: pct });
+      accChart.data.labels.push(`R${pt.round}`);
+      accChart.data.datasets[0].data.push(pct);
+    });
+    accChart.update();
+  }
+  
   // Update network graph
   if (netGraph && d.clients) {
     const ids = d.clients.map ? d.clients.map(c => c.id || c) : d.clients;
@@ -197,26 +227,72 @@ function handleStatusUpdate(d) {
   }
 }
 
+let epochTabsState = { activeRound: 1, data: {} };
+
 function updateEpochMetrics(d) {
-  // Update the epoch metrics panel in client/live dashboard
+  const panel = el('epoch-metrics-panel');
+  const tabsContainer = el('epoch-tabs');
+  if (!panel || !tabsContainer) return;
+
+  const emptyMsg = el('epoch-metrics-empty');
+  if (emptyMsg) emptyMsg.style.display = 'none';
+
+  // Initialize round data
+  if (!epochTabsState.data[d.round]) {
+    epochTabsState.data[d.round] = [];
+    
+    // Create tab button if it doesn't exist
+    let tabBtn = tabsContainer.querySelector(`[data-round="${d.round}"]`);
+    if (!tabBtn) {
+      tabBtn = document.createElement('button');
+      tabBtn.className = 'epoch-tab';
+      tabBtn.dataset.round = d.round;
+      tabBtn.textContent = `Round ${d.round}`;
+      tabBtn.onclick = () => switchEpochTab(d.round);
+      tabsContainer.appendChild(tabBtn);
+    }
+    
+    // Auto-switch to newest round if it's the latest
+    switchEpochTab(d.round);
+  }
+
+  // Add data point
+  epochTabsState.data[d.round].push(d);
+
+  // If this round is currently active, render it
+  if (epochTabsState.activeRound === d.round) {
+    appendEpochRow(d, panel);
+  }
+}
+
+function switchEpochTab(round) {
+  epochTabsState.activeRound = round;
+  
+  // Update tab styles
+  document.querySelectorAll('.epoch-tab').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.round) === round);
+  });
+  
+  // Re-render rows
   const panel = el('epoch-metrics-panel');
   if (!panel) return;
+  panel.innerHTML = '';
+  
+  const rows = epochTabsState.data[round] || [];
+  rows.forEach(d => appendEpochRow(d, panel));
+}
 
-  panel.style.display = 'block';
+function appendEpochRow(d, panel) {
   const row = document.createElement('div');
   row.className = 'epoch-metric-row slide-up';
   row.innerHTML = `
-    <span class="mono" style="color:var(--muted)">R${d.round} E${d.epoch}</span>
-    <span class="mono">Loss: <strong style="color:${d.loss < 0.5 ? 'var(--coord)' : 'var(--warn, #ff6b6b)'}">${d.loss.toFixed(4)}</strong></span>
-    <span class="mono">Acc: <strong style="color:var(--client)">${d.accuracy.toFixed(1)}%</strong></span>
-    <span class="mono text-muted">${d.samples?.toLocaleString() || '—'} samples</span>
-    <span class="mono text-muted">${d.timestamp || ''}</span>`;
+    <span class="mono" style="flex:0.5; color:var(--muted)">E${d.epoch}</span>
+    <span class="mono" style="flex:1">${d.client_id || 'unknown'}</span>
+    <span class="mono" style="flex:1; color:${d.loss < 0.5 ? 'var(--coord)' : 'var(--warn, #ff6b6b)'}">${d.loss.toFixed(4)}</span>
+    <span class="mono" style="flex:1; color:var(--client)">${d.accuracy.toFixed(1)}%</span>
+    <span class="mono text-muted" style="flex:1">${d.samples?.toLocaleString() || '—'}</span>`;
   panel.appendChild(row);
   panel.scrollTop = panel.scrollHeight;
-
-  // Cap at 50 entries
-  const rows = panel.querySelectorAll('.epoch-metric-row');
-  if (rows.length > 50) rows[0].remove();
 }
 
 
@@ -321,12 +397,22 @@ async function signUp() {
   msg('signup-msg', 'Account created (demo mode)', 'ok');
   await sleep(400);
   S.role = S.signupRole;
-  showScreen(S.role === 'coordinator' ? 'screen-coord-setup' : 'screen-client-setup');
+  if (S.role === 'coordinator') {
+    document.getElementById('modal-coord-mode').style.display = 'flex';
+  } else {
+    showScreen('screen-client-discovery');
+    pollCoordinatorForClient();
+  }
 }
 
 function quickAccess(role) {
   S.role = role;
-  showScreen(role === 'coordinator' ? 'screen-coord-setup' : 'screen-client-setup');
+  if (role === 'coordinator') {
+    document.getElementById('modal-coord-mode').style.display = 'flex';
+  } else {
+    showScreen('screen-client-discovery');
+    pollCoordinatorForClient();
+  }
 }
 
 // Sign-up step logic
@@ -576,7 +662,8 @@ async function submitJob() {
       method: 'POST',
       body: {
         client_count: S.expectedClients,
-        // TRD v2.1: epochs, rounds, job_name added here
+        rounds: rounds,
+        epochs: parseInt(el('job-epochs').value) || 2
       },
     });
 
@@ -712,11 +799,21 @@ class NetworkGraph {
   resize() {
     const p = this.cv.parentElement;
     const r = p.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
     // Leave 42px for the panel header
-    this.cv.width  = Math.floor(r.width);
-    this.cv.height = Math.max(Math.floor(r.height) - 42, 120);
-    this.cx = this.cv.width  / 2;
-    this.cy = this.cv.height / 2;
+    const logicalW = Math.floor(r.width);
+    const logicalH = Math.max(Math.floor(r.height) - 42, 120);
+    
+    this.cv.width  = logicalW * dpr;
+    this.cv.height = logicalH * dpr;
+    this.cv.style.width  = `${logicalW}px`;
+    this.cv.style.height = `${logicalH}px`;
+    
+    this.ctx.resetTransform();
+    this.ctx.scale(dpr, dpr);
+    
+    this.cx = logicalW / 2;
+    this.cy = logicalH / 2;
     this._reposition();
   }
 
@@ -753,7 +850,9 @@ class NetworkGraph {
 
   draw() {
     const { ctx, cv, clients, packets, time, cx, cy } = this;
-    ctx.clearRect(0, 0, cv.width, cv.height);
+    const w = cv.width / (window.devicePixelRatio || 1);
+    const h = cv.height / (window.devicePixelRatio || 1);
+    ctx.clearRect(0, 0, w, h);
 
     // Smoothly interpolate client positions & fade in
     clients.forEach(c => {
@@ -1232,6 +1331,83 @@ async function runDiscovery(coordURL) {
   }
 }
 
+// ════════════════════════════════════════════════════════════════
+//  CLIENT DISCOVERY & POLLING
+// ════════════════════════════════════════════════════════════════
+
+async function pollCoordinatorForClient() {
+  setText('disc-status', 'Contacting coordinator…');
+  setText('disc-url', S.coordURL);
+  
+  let attempts = 0;
+  const poll = setInterval(async () => {
+    attempts++;
+    try {
+      const res = await fetch(`${S.coordURL}/api/config`);
+      if (res.ok) {
+        clearInterval(poll);
+        setText('disc-status', 'Connection established!');
+        await sleep(1000);
+        el('btn-agent-continue').style.display = 'block';
+        showScreen('screen-agent-setup');
+      }
+    } catch (e) {
+      if (attempts > 10) {
+        setText('disc-status', 'Is the Coordinator running? Retrying...');
+      }
+    }
+  }, 3000);
+}
+
+// ════════════════════════════════════════════════════════════════
+//  AGENT SETUP
+// ════════════════════════════════════════════════════════════════
+
+function selectOS(os) {
+  document.querySelectorAll('.os-btn').forEach(b => b.classList.remove('active'));
+  el(`os-${os}`).classList.add('active');
+
+  const url = S.coordURL || window.location.origin;
+
+  let cmd = '';
+  if (S.role === 'coordinator') {
+    if (os === 'windows') {
+      cmd = `1. Open Command Prompt (cmd)
+2. cd path\\to\\Net-Neutral-AI
+3. pip install -r requirements.txt
+4. python backend\\coordinator\\server.py`;
+    } else {
+      cmd = `1. Open Terminal
+2. cd path/to/Net-Neutral-AI
+3. pip install -r requirements.txt
+4. python backend/coordinator/server.py`;
+    }
+  } else {
+    if (os === 'windows') {
+      cmd = `1. Open Command Prompt (cmd)
+2. cd path\\to\\Net-Neutral-AI
+3. pip install -r requirements.txt
+4. python backend\\client\\client.py --coordinator_url ${url}`;
+    } else {
+      cmd = `1. Open Terminal
+2. cd path/to/Net-Neutral-AI
+3. pip install -r requirements.txt
+4. python backend/client/client.py --coordinator_url ${url}`;
+    }
+  }
+
+  const roleText = S.role === 'coordinator' ? 'Coordinator Server' : 'Background Agent';
+  
+  el('agent-guide').innerHTML = `
+    <div class="code-block" style="margin-top:16px;">
+      <div class="code-header">
+        <span class="mono">Start ${roleText} (${os})</span>
+        <button class="btn-copy" onclick="copyAgentCmd(this)">Copy</button>
+      </div>
+      <pre class="code-content"><code id="agent-cmd">${cmd}</code></pre>
+    </div>
+  `;
+}
 
 // ════════════════════════════════════════════════════════════════
 //  CLIENT DASHBOARD  —  Polling
@@ -1281,14 +1457,32 @@ function startClientPolling() {
         S.pollClient = null;
       }
 
-      // Add timeline entry when round changes
+      // Rebuild timeline from history + current status
+      const tl = el('epoch-timeline');
+      if (tl) {
+        tl.innerHTML = '';
+        const hist = d.round_history || [];
+        
+        hist.forEach(r => {
+          addTimelineItemElement(tl, r.round, 'done', r.points_earned);
+        });
+        
+        // Add current active round if not in history
+        if (d.current_round > 0 && d.round_status !== 'done' && !hist.find(r => r.round === d.current_round)) {
+          addTimelineItemElement(tl, d.current_round, d.round_status, 0);
+        }
+        
+        if (tl.children.length === 0) {
+          tl.innerHTML = `<div class="timeline-empty mono text-muted">Training hasn't started yet</div>`;
+        }
+      }
+      
+      // Keep logging for new rounds
       if (d.current_round !== lastRound && d.current_round > 0) {
-        const earned = d.total_credits - totalCredits;
-        addTimelineItem(d.current_round, d.round_status, earned);
-        if (d.round_status === 'active')
+        if (d.round_status === 'active') {
           log('client-log', `Round ${d.current_round} — training locally…`, 'round');
-        lastRound    = d.current_round;
-        totalCredits = d.total_credits;
+        }
+        lastRound = d.current_round;
       }
 
     } catch { /* silent */ }
@@ -1298,16 +1492,9 @@ function startClientPolling() {
   S.pollClient = setInterval(tick, 3000);
 }
 
-function addTimelineItem(round, status, creditsEarned) {
-  const tl = el('epoch-timeline');
-  // Clear empty state
-  const empty = tl.querySelector('.timeline-empty');
-  if (empty) empty.remove();
-  // Demote previous active item to done
-  tl.querySelectorAll('.tl-item.active').forEach(i => i.classList.replace('active', 'done'));
-
+function addTimelineItemElement(tl, round, status, creditsEarned) {
   const item = document.createElement('div');
-  item.className = `tl-item ${status === 'done' ? 'done' : 'active'} slide-up`;
+  item.className = `tl-item ${status === 'done' ? 'done' : 'active'}`;
   item.innerHTML = `
     <div class="tl-round mono">ROUND ${round}</div>
     <div class="tl-stat">${fmtStatus(status)}</div>
@@ -1357,16 +1544,16 @@ function selectOS(os) {
     : `Requirements: Python 3.12 · PyTorch 2.3 · psutil · GPUtil`;
 
   let installSteps = isCoord ? '' : `
-        <div class="agent-step"><span class="agent-step-n">5.</span> (Optional) Install as background service</div>
+        <div class="agent-step"><span class="agent-step-n">4.</span> (Optional) Install as background service</div>
         <pre class="codeblock">install\\install_windows.bat</pre>`;
 
   let macInstallSteps = isCoord ? '' : `
-        <div class="agent-step"><span class="agent-step-n">3.</span> (Optional) Install as launchd service</div>
+        <div class="agent-step"><span class="agent-step-n">4.</span> (Optional) Install as launchd service</div>
         <pre class="codeblock">bash install/install_mac.sh
 launchctl load ~/Library/LaunchAgents/ai.netneutral.agent.plist</pre>`;
 
   let linInstallSteps = isCoord ? '' : `
-        <div class="agent-step"><span class="agent-step-n">3.</span> (Optional) Install as systemd user service</div>
+        <div class="agent-step"><span class="agent-step-n">4.</span> (Optional) Install as systemd user service</div>
         <pre class="codeblock">bash install/install_linux.sh
 systemctl --user enable netneutral-agent
 systemctl --user start netneutral-agent</pre>`;
@@ -1383,10 +1570,7 @@ systemctl --user start netneutral-agent</pre>`;
 cd Net-Neutral-AI/${repoDir}</pre>
         <div class="agent-step"><span class="agent-step-n">2.</span> Install dependencies</div>
         <pre class="codeblock">pip install -r requirements.txt</pre>
-        ${!isCoord ? `<div class="agent-step"><span class="agent-step-n">3.</span> Set coordinator URL in config.py</div>
-        <pre class="codeblock">COORDINATOR_URL = "${url}"
-CLIENT_ID       = "${cid}"</pre>
-        <div class="agent-step"><span class="agent-step-n">4.</span> Run manually</div>` : `<div class="agent-step"><span class="agent-step-n">3.</span> Run manually</div>`}
+        <div class="agent-step"><span class="agent-step-n">3.</span> Run manually</div>
         <pre class="codeblock">${winRunCmd}</pre>${installSteps}
       </div>`,
 
@@ -1396,11 +1580,12 @@ CLIENT_ID       = "${cid}"</pre>
         <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
           ${reqText}
         </p>
-        <div class="agent-step"><span class="agent-step-n">1.</span> Clone & install</div>
+        <div class="agent-step"><span class="agent-step-n">1.</span> Clone the repository</div>
         <pre class="codeblock">git clone https://github.com/Janhvesh-Patil/Net-Neutral-AI.git -b testing_site
-cd Net-Neutral-AI/${repoDir}
-pip3 install -r requirements.txt</pre>
-        <div class="agent-step"><span class="agent-step-n">2.</span> Run manually</div>
+cd Net-Neutral-AI/${repoDir}</pre>
+        <div class="agent-step"><span class="agent-step-n">2.</span> Install dependencies</div>
+        <pre class="codeblock">pip3 install -r requirements.txt</pre>
+        <div class="agent-step"><span class="agent-step-n">3.</span> Run manually</div>
         <pre class="codeblock">${macRunCmd}</pre>${macInstallSteps}
       </div>`,
 
@@ -1410,11 +1595,12 @@ pip3 install -r requirements.txt</pre>
         <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
           ${reqText}
         </p>
-        <div class="agent-step"><span class="agent-step-n">1.</span> Clone & install</div>
+        <div class="agent-step"><span class="agent-step-n">1.</span> Clone the repository</div>
         <pre class="codeblock">git clone https://github.com/Janhvesh-Patil/Net-Neutral-AI.git -b testing_site
-cd Net-Neutral-AI/${repoDir}
-pip3 install -r requirements.txt</pre>
-        <div class="agent-step"><span class="agent-step-n">2.</span> Run manually</div>
+cd Net-Neutral-AI/${repoDir}</pre>
+        <div class="agent-step"><span class="agent-step-n">2.</span> Install dependencies</div>
+        <pre class="codeblock">pip3 install -r requirements.txt</pre>
+        <div class="agent-step"><span class="agent-step-n">3.</span> Run manually</div>
         <pre class="codeblock">${macRunCmd}</pre>${linInstallSteps}
       </div>`,
   };

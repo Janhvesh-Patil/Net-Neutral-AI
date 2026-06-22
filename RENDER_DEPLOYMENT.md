@@ -13,7 +13,7 @@ Use the following settings when creating a new **Web Service** on Render:
 | **Repository** | `https://github.com/Janhvesh-Patil/Net-Neutral-AI` |
 | **Branch** | `testing_site` |
 | **Runtime** | `Python` |
-| **Build Command** | `pip install -r backend/coordinator/requirements.txt` |
+| **Build Command** | `pip install -r backend/coordinator/requirements-render.txt` |
 | **Start Command** | `python backend/coordinator/server.py` |
 
 ---
@@ -78,7 +78,7 @@ python3 client.py --client_id client_A --coordinator_url https://your-app-name.o
 2. **Connect Repository**: Select your GitHub repository (`Janhvesh-Patil/Net-Neutral-AI`).
 3. **Configure Settings**:
    - **Runtime**: Python
-   - **Build Command**: `pip install -r backend/coordinator/requirements.txt`
+   - **Build Command**: `pip install -r backend/coordinator/requirements-render.txt`
    - **Start Command**: `python backend/coordinator/server.py`
 4. **Deploy**: Click **Create Web Service**. Render will install the dependencies, automatically set a `PORT` environment variable, and start the server. 
 5. **Access the Website**: Once the deployment turns green, click the URL provided by Render (e.g., `https://net-neutral-ai.onrender.com`). The frontend dashboard will load.

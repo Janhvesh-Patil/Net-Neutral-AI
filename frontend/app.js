@@ -205,6 +205,7 @@ function handleStatusUpdate(d) {
   if (d.global_accuracy > 0) {
     setText('live-acc-readout', normPct(d.global_accuracy).toFixed(1) + '%');
   }
+  updateStatusVisualizer(d.round_status, '');
   
   // Render full accuracy history
   if (d.accuracy_history && d.accuracy_history.length > 0 && accChart) {
@@ -1440,6 +1441,7 @@ function startClientPolling() {
       setText('client-stat-round',   `${d.current_round || '—'} / ${d.total_rounds || '—'}`);
       setText('client-stat-status',  fmtStatus(d.round_status));
       setText('client-rounds-label', `${d.current_round || 0} / ${d.total_rounds || '?'} rounds`);
+      updateStatusVisualizer(d.round_status, 'c-');
 
       if (d.global_accuracy > 0) {
         setText('client-stat-acc', normPct(d.global_accuracy).toFixed(1) + '%');
@@ -1720,6 +1722,36 @@ function fmtStatus(s) {
     done:                'Complete',
   };
   return map[s] ?? (s ? s.replace(/_/g, ' ') : 'Idle');
+}
+
+// ════════════════════════════════════════════════════════════════
+//  STATUS VISUALIZER
+// ════════════════════════════════════════════════════════════════
+function updateStatusVisualizer(status, prefix = '') {
+  const idle = el(prefix + 'status-img-idle');
+  const active = el(prefix + 'status-img-active');
+  const agg = el(prefix + 'status-img-agg');
+  const label = el(prefix + 'status-vis-label');
+  
+  if (!idle || !active || !agg || !label) return;
+
+  idle.style.display = 'none';
+  active.style.display = 'none';
+  agg.style.display = 'none';
+
+  if (status === 'active') {
+    active.style.display = 'block';
+    label.textContent = 'Training Locally...';
+  } else if (status === 'aggregating') {
+    agg.style.display = 'block';
+    label.textContent = 'Aggregating Weights...';
+  } else if (status === 'done') {
+    idle.style.display = 'block';
+    label.textContent = 'Training Complete';
+  } else {
+    idle.style.display = 'block';
+    label.textContent = 'Waiting...';
+  }
 }
 
 // Normalise accuracy to 0–100 range

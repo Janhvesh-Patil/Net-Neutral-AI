@@ -246,6 +246,18 @@ button {
   background: var(--surface-2);
 }
 
+.btn-coord:disabled,
+.btn-client:disabled,
+.btn-ghost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none !important;
+  transform: none !important;
+  background: var(--surface-2) !important;
+  color: var(--muted) !important;
+  border-color: var(--border) !important;
+}
+
 .btn-block {
   display: block;
   width: 100%;
@@ -401,12 +413,19 @@ button {
   font-size: 11.5px;
   line-height: 1.9;
 }
-.log-box::-webkit-scrollbar {
-  width: 3px;
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
-.log-box::-webkit-scrollbar-thumb {
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+::-webkit-scrollbar-thumb {
   background: var(--dim);
-  border-radius: 2px;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
 }
 
 .log-box-fill {
@@ -1595,6 +1614,113 @@ pre.codeblock {
   50% {
     transform: translateY(-7px);
     opacity: 0.4;
+  }
+}
+
+/* ── 13. MODALS ───────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(8, 12, 16, 0.85);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: screenFade 0.2s ease;
+}
+.modal-content {
+  width: 100%;
+  max-width: 440px;
+  margin: 20px;
+}
+
+/* ── STATUS VISUALIZER ANIMATIONS ─────────────────────────────── */
+.status-visualizer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+}
+.status-img {
+  max-width: 160px;
+  border-radius: var(--r-md);
+  margin-bottom: 12px;
+  transition: opacity 0.3s;
+}
+.anim-study {
+  animation: floatAnim 3s ease-in-out infinite;
+}
+.anim-debate {
+  animation: pulseShake 0.5s ease-in-out infinite alternate;
+}
+.anim-sleep {
+  animation: slowBreathe 4s ease-in-out infinite;
+}
+
+@keyframes floatAnim {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+@keyframes pulseShake {
+  0% { transform: scale(1) rotate(-1deg); }
+  100% { transform: scale(1.02) rotate(1deg); }
+}
+@keyframes slowBreathe {
+  0%, 100% { transform: scale(1); filter: brightness(1); }
+  50% { transform: scale(0.98); filter: brightness(0.8); }
+}
+
+/* ── RESPONSIVE MEDIA QUERIES ─────────────────────────────────── */
+@media (max-width: 900px) {
+  .training-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    overflow-y: auto;
+  }
+  .t-panel {
+    min-height: 300px;
+  }
+  .dash-body {
+    flex-direction: column;
+  }
+  .dash-sidebar {
+    width: 100%;
+    height: auto;
+    flex-direction: row;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .sbar-stat {
+    flex: 1;
+    min-width: 100px;
+  }
+  .sbar-action {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .hero-title {
+    font-size: 42px;
+  }
+  .stats-bar {
+    flex-direction: column;
+    gap: 16px;
+    padding: 22px;
+  }
+  .stat-sep {
+    width: 100px;
+    height: 1px;
+  }
+  .two-col {
+    grid-template-columns: 1fr;
+  }
+  .role-picker {
+    grid-template-columns: 1fr;
   }
 }
 

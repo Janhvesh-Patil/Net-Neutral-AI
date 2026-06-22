@@ -47,8 +47,3 @@ REGISTER_RETRY_DELAY    = 10    # seconds between retry attempts
 WAIT_FOR_DATA_TIMEOUT_SECS = 300  # how long client waits for data before timeout
 LOCAL_DATA_DIR = "local_data"     # where clients store their data shard
 DATA_SHARD_FILENAME = "{client_id}_data.csv"  # format for shard filename
-
-# ── Supabase (Central Credits Database) ───────────────────────────────────────
-import os
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")

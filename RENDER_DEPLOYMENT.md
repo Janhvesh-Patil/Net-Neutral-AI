@@ -25,11 +25,6 @@ Configure these variables in the **Environment** tab of your Render Web Service 
 | Variable | Type | Value / Description |
 | :--- | :--- | :--- |
 | `PORT` | *Automatic* | Render sets this automatically (usually `10000`). The coordinator is pre-configured to dynamically bind to this port. |
-| `SUPABASE_URL` | *Optional* | Your Supabase project URL (e.g., `https://xyz.supabase.co`). Required to sync final training round credits to the cloud database. |
-| `SUPABASE_KEY` | *Optional* | Your Supabase anon/public API key. Required to sync final training round credits. |
-
-> [!NOTE]
-> If `SUPABASE_URL` and `SUPABASE_KEY` are left blank, training will run normally, but leaderboard credits will be stored locally in SQLite (`database.db`) only and will not sync to the cloud database.
 
 ---
 
@@ -37,7 +32,6 @@ Configure these variables in the **Environment** tab of your Render Web Service 
 
 Because Render Web Services use an ephemeral filesystem, the local SQLite database (`backend/coordinator/database.db`) and uploaded datasets will be reset whenever the service restarts, redeploys, or goes to sleep (on the free tier).
 
-* **Cloud Persistence**: Enabling Supabase sync (using the environment variables above) ensures that lifetime client credits are safely backed up to the cloud at the completion of a training session.
 * **Persistent Disk**: If you require database and checkpoint persistence across restarts without losing local session histories, attach a **Persistent Disk** on Render (available on paid tiers) and mount it.
 
 ---

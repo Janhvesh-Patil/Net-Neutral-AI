@@ -38,13 +38,6 @@ def broadcast_event(event_type: str, data: dict) -> None:
 # In-memory store for per-epoch training data reported by clients
 epoch_reports = {}   # {client_id: [{epoch, loss, accuracy, samples, round}]}
 
-# Try to import supabase_sync (optional for cloud sync)
-try:
-    import supabase_sync
-    SUPABASE_SYNC_AVAILABLE = True
-except ImportError:
-    SUPABASE_SYNC_AVAILABLE = False
-
 app = Flask(
     __name__,
     static_folder=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'frontend'),
@@ -199,13 +192,8 @@ def _process_round_completion(current_round_copy, round_start_time_copy, weights
             'final_accuracy': global_acc,
             'total_rounds': TOTAL_ROUNDS,
         })
-
-        # Sync credits to central Supabase database
-        if SUPABASE_SYNC_AVAILABLE:
-            try:
-                supabase_sync.sync_credits_to_cloud()
-            except Exception as e:
-                print(f"[Coordinator] Cloud sync failed (non-fatal): {e}")
+        print("[Coordinator] Training session complete! Resetting active round state.")
+        data_distributor.is_active = False
     else:
         with state_lock:
             current_round += 1

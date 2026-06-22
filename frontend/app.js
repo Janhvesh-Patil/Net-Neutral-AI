@@ -1370,42 +1370,61 @@ function selectOS(os) {
 
   const url = S.coordURL || window.location.origin;
 
-  let cmd = '';
-  if (S.role === 'coordinator') {
-    if (os === 'windows') {
-      cmd = `1. Open Command Prompt (cmd)
-2. cd path\\to\\Net-Neutral-AI
-3. pip install -r requirements.txt
-4. python backend\\coordinator\\server.py`;
-    } else {
-      cmd = `1. Open Terminal
-2. cd path/to/Net-Neutral-AI
-3. pip install -r requirements.txt
-4. python backend/coordinator/server.py`;
-    }
-  } else {
-    if (os === 'windows') {
-      cmd = `1. Open Command Prompt (cmd)
-2. cd path\\to\\Net-Neutral-AI
-3. pip install -r requirements.txt
-4. python backend\\client\\client.py --coordinator_url ${url}`;
-    } else {
-      cmd = `1. Open Terminal
-2. cd path/to/Net-Neutral-AI
-3. pip install -r requirements.txt
-4. python backend/client/client.py --coordinator_url ${url}`;
-    }
+  let term = os === 'windows' ? 'Command Prompt (cmd)' : 'Terminal';
+  let cloneCmd = `git clone https://github.com/Janhvesh-Patil/Net-Neutral-AI.git\ncd Net-Neutral-AI`;
+  
+  let reqPath = S.role === 'coordinator' ? 'backend/coordinator' : 'backend/client';
+  if (os === 'windows') reqPath = reqPath.replace(/\\//g, '\\\\');
+  
+  let depCmdGpu = `pip install -r ${reqPath}/requirements.txt`;
+  let reqRender = S.role === 'coordinator' ? 'requirements-render.txt' : 'requirements-cpu.txt';
+  let depCmdCpu = `pip install -r ${reqPath}/${reqRender}`;
+
+  let runPath = S.role === 'coordinator' ? 'backend/coordinator/server.py' : 'backend/client/client.py';
+  if (os === 'windows') runPath = runPath.replace(/\\//g, '\\\\');
+  
+  let runCmd = `python ${runPath}`;
+  if (S.role !== 'coordinator') {
+    runCmd += ` --coordinator_url ${url}`;
   }
 
   const roleText = S.role === 'coordinator' ? 'Coordinator Server' : 'Background Agent';
   
   el('agent-guide').innerHTML = `
-    <div class="code-block" style="margin-top:16px;">
-      <div class="code-header">
-        <span class="mono">Start ${roleText} (${os})</span>
-        <button class="btn-copy" onclick="copyAgentCmd(this)">Copy</button>
+    <div style="margin-top: 20px; text-align: left;">
+      <p class="text-muted mono small-caps" style="margin-bottom: 8px;">Step 1: Download the Repository</p>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="mono">Open ${term} and run:</span>
+          <button class="btn-copy" onclick="copyAgentCmd(this)">Copy</button>
+        </div>
+        <pre class="code-content"><code>${cloneCmd}</code></pre>
       </div>
-      <pre class="code-content"><code id="agent-cmd">${cmd}</code></pre>
+
+      <p class="text-muted mono small-caps" style="margin-top: 20px; margin-bottom: 8px;">Step 2: Install Dependencies</p>
+      <div class="code-block" style="margin-bottom: 12px;">
+        <div class="code-header">
+          <span class="mono">Option A: Machines WITH an NVIDIA GPU</span>
+          <button class="btn-copy" onclick="copyAgentCmd(this)">Copy</button>
+        </div>
+        <pre class="code-content"><code>${depCmdGpu}</code></pre>
+      </div>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="mono">Option B: Machines WITHOUT a GPU (CPU only)</span>
+          <button class="btn-copy" onclick="copyAgentCmd(this)">Copy</button>
+        </div>
+        <pre class="code-content"><code>${depCmdCpu}</code></pre>
+      </div>
+
+      <p class="text-muted mono small-caps" style="margin-top: 20px; margin-bottom: 8px;">Step 3: Run the ${roleText}</p>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="mono">Execute this command:</span>
+          <button class="btn-copy" onclick="copyAgentCmd(this)">Copy</button>
+        </div>
+        <pre class="code-content"><code>${runCmd}</code></pre>
+      </div>
     </div>
   `;
 }

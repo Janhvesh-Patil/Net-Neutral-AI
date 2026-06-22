@@ -137,7 +137,7 @@ def poll_for_next_round(current_round: int) -> dict:
 
     while True:
         try:
-            response = requests.get(url, timeout=5)
+            response = requests.get(url, timeout=30)
             response.raise_for_status()
             status = response.json()
 
@@ -156,8 +156,14 @@ def poll_for_next_round(current_round: int) -> dict:
 
             time.sleep(config.POLL_INTERVAL_SECS)
 
+        except requests.exceptions.ReadTimeout:
+            print_status(f"Coordinator is aggregating global model... (this may take 1-2 mins on free tier)")
+            time.sleep(5)
         except requests.exceptions.RequestException as e:
-            print_status(f"[WARNING] Status poll failed: {e}. Retrying...")
+            if "Read timed out" in str(e) or "ReadTimeout" in str(e):
+                print_status(f"Coordinator is aggregating global model... (this may take 1-2 mins on free tier)")
+            else:
+                print_status(f"[WARNING] Status poll failed: {e}. Retrying...")
             time.sleep(config.POLL_INTERVAL_SECS)
 
 
@@ -228,7 +234,7 @@ def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
         wait_start = time.time()
         while True:
             try:
-                resp = requests.get(f"{config.BASE_URL}/status", timeout=5)
+                resp = requests.get(f"{config.BASE_URL}/status", timeout=30)
                 resp.raise_for_status()
                 st = resp.json().get('round_status', '')
                 if st in ('data_distributing', 'active'):
@@ -243,8 +249,14 @@ def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
                 if elapsed % 10 == 0:
                     print_status(f"Coordinator status: {st} — waiting... ({elapsed}s)")
                 time.sleep(config.POLL_INTERVAL_SECS)
+            except requests.exceptions.ReadTimeout:
+                print_status(f"Coordinator is busy... (waiting for data distribution)")
+                time.sleep(5)
             except requests.exceptions.RequestException as e:
-                print_status(f"[WARNING] Status poll failed: {e}. Retrying...")
+                if "Read timed out" in str(e) or "ReadTimeout" in str(e):
+                    print_status(f"Coordinator is busy... (waiting for data distribution)")
+                else:
+                    print_status(f"[WARNING] Status poll failed: {e}. Retrying...")
                 time.sleep(config.POLL_INTERVAL_SECS)
 
         print_status(f"Data shard not found locally. Downloading from coordinator...")

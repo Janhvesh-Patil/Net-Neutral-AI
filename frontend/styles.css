@@ -146,8 +146,8 @@ button {
 /* ── 6. HUD PANELS ────────────────────────────────────────────── */
 .hud-panel {
   position: relative;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: transparent;
+  border: none;
   border-radius: var(--r-md);
   padding: 20px;
 }
@@ -178,8 +178,8 @@ button {
 
 /* Coordinator variant */
 .coord-panel {
-  border-color: var(--coord-border);
-  box-shadow: 0 0 28px rgba(0, 229, 160, 0.06);
+  border-color: transparent;
+  box-shadow: none;
 }
 .coord-panel::before,
 .coord-panel::after {
@@ -188,8 +188,8 @@ button {
 
 /* Client variant */
 .client-panel {
-  border-color: var(--client-border);
-  box-shadow: 0 0 28px rgba(0, 119, 255, 0.06);
+  border-color: transparent;
+  box-shadow: none;
 }
 .client-panel::before,
 .client-panel::after {
@@ -1649,6 +1649,9 @@ pre.codeblock {
   border-radius: var(--r-md);
   margin-bottom: 12px;
   transition: opacity 0.3s;
+  mix-blend-mode: screen;
+  -webkit-mask-image: radial-gradient(circle, rgba(0,0,0,1) 40%, rgba(0,0,0,0) 70%);
+  mask-image: radial-gradient(circle, rgba(0,0,0,1) 40%, rgba(0,0,0,0) 70%);
 }
 .anim-study {
   animation: floatAnim 3s ease-in-out infinite;

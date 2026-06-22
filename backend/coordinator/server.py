@@ -84,20 +84,37 @@ data_shards = {}      # {client_id: DataFrame} - in-memory cache of divided data
 uploaded_dataset_path = os.path.join(COORDINATOR_DIR, 'uploaded_dataset.csv')
 model_downloaded = False  # Flag to track if coordinator has downloaded the final model
 
+# Cache for evaluation
+_cached_val_loader = None
+
 # --- Evaluation Wrapper ---
 def run_evaluation_from_path(model_path: str, round_number: int) -> float:
+    global _cached_val_loader
     import sys
     # Ensure Python can find the client folder
     project_root = os.path.dirname(COORDINATOR_DIR)
-    sys.path.insert(0, project_root)
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
     
     from client.model import TransformerClassifier
-    from client.data import setup_data, get_validation_dataloader
+    from client.data import Vocabulary, get_validation_dataloader
+    import data_distributor
     
-    # 1. Load the validation dataset (using the 20% test split from uploaded data)
-    test_csv_path = os.path.join(COORDINATOR_DIR, "uploaded_test.csv")
-    test_texts, test_labels, _, _, vocab = setup_data(local_shard_path=test_csv_path, save_vocab=False)
-    val_loader = get_validation_dataloader(test_texts, test_labels, vocab)
+    if _cached_val_loader is None:
+        print("[Coordinator] Initializing validation dataloader from cached data...")
+        test_csv_path = os.path.join(COORDINATOR_DIR, "uploaded_test.csv")
+        global_vocab_path = os.path.join(COORDINATOR_DIR, "vocab.json")
+        
+        if not os.path.exists(global_vocab_path):
+            raise FileNotFoundError("global vocab.json not found. Was dataset uploaded?")
+            
+        vocab = Vocabulary.load(global_vocab_path)
+        df_test = data_distributor.load_and_validate_csv(test_csv_path)
+        test_texts = df_test['review'].tolist()
+        test_labels = df_test['label'].tolist()
+        _cached_val_loader = get_validation_dataloader(test_texts, test_labels, vocab)
+    
+    val_loader = _cached_val_loader
     
     # 2. Initialize an empty model and load the weights from the file
     model = TransformerClassifier()
@@ -416,6 +433,19 @@ def upload_dataset():
         df = data_distributor.load_and_validate_csv(uploaded_dataset_path)
         num_rows = len(df)
 
+        # Build and save global vocabulary
+        project_root = os.path.dirname(COORDINATOR_DIR)
+        import sys
+        if project_root not in sys.path:
+            sys.path.insert(0, project_root)
+        from client.data import Vocabulary, VOCAB_SIZE, TRAIN_SIZE
+        
+        global_vocab_path = os.path.join(COORDINATOR_DIR, "vocab.json")
+        vocab = Vocabulary()
+        vocab.build(df['review'].tolist()[:TRAIN_SIZE], max_size=VOCAB_SIZE)
+        vocab.save(global_vocab_path)
+        print(f"[Coordinator] Global vocabulary built: {vocab.size} tokens")
+
         print(f"[Coordinator] Dataset validated: {num_rows} samples")
         return jsonify({'status': 'ok', 'rows': num_rows})
 
@@ -437,6 +467,15 @@ def get_clients():
         for c in db_clients
     ]
     return jsonify({'clients': clients_list, 'count': len(clients_list)})
+
+
+@app.route('/vocab', methods=['GET'])
+def get_vocab():
+    """Serve the globally generated vocabulary JSON file."""
+    vocab_path = os.path.join(COORDINATOR_DIR, 'vocab.json')
+    if os.path.exists(vocab_path):
+        return send_file(vocab_path, mimetype='application/json')
+    return jsonify({'error': 'Vocabulary not found. Please upload dataset first.'}), 404
 
 
 @app.route('/start_training', methods=['POST'])

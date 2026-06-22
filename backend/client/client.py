@@ -225,6 +225,22 @@ def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
     os.makedirs(config.LOCAL_DATA_DIR, exist_ok=True)
     data_shard_path = os.path.join(config.LOCAL_DATA_DIR, config.DATA_SHARD_FILENAME.format(client_id=client_id))
 
+    # FIX 1.5: Download global vocabulary to ensure token consistency
+    vocab_save_path = os.path.join(config.LOCAL_DATA_DIR, 'vocab.json')
+    if not os.path.exists(vocab_save_path):
+        print_status("Downloading global vocabulary from coordinator...")
+        try:
+            v_resp = requests.get(f"{config.BASE_URL}/vocab", timeout=30)
+            v_resp.raise_for_status()
+            with open(vocab_save_path, 'wb') as f:
+                f.write(v_resp.content)
+            print_status("[OK] Global vocabulary downloaded.")
+        except Exception as e:
+            print_status(f"[ERROR] Failed to download vocabulary: {e}")
+            raise
+    else:
+        print_status("[OK] Using cached global vocabulary.")
+
     if not os.path.exists(data_shard_path):
         # FIX 1.4: Wait for coordinator to enter 'data_distributing' or 'active'
         # before attempting to download the shard.  Without this, the client
@@ -272,7 +288,7 @@ def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
     print_status("Loading data shard...")
     train_texts, train_labels, _, _, vocab = setup_data(
         data_dir=data_dir,
-        vocab_path=vocab_path,
+        vocab_path=vocab_save_path,
         save_vocab=False,
         local_shard_path=data_shard_path
     )

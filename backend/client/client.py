@@ -127,36 +127,37 @@ def submit_weights(
         upload_path = weights_path
         upload_filename = 'weights.pt'
 
-    for attempt in range(1, MAX_ATTEMPTS + 1):
-        try:
-            print_status(f"Submitting weights to coordinator (attempt {attempt}/{MAX_ATTEMPTS})...")
-            with open(upload_path, 'rb') as f:
-                response = requests.post(
-                    url,
-                    files={'weights': (upload_filename, f, 'application/octet-stream')},
-                    data={
-                        'client_id':       client_id,
-                        'samples_trained': samples_trained,
-                        'time_seconds':    time_seconds,
-                    },
-                    timeout=(CONNECT_TIMEOUT, READ_TIMEOUT),
-                )
-                response.raise_for_status()
+    try:
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            try:
+                print_status(f"Submitting weights to coordinator (attempt {attempt}/{MAX_ATTEMPTS})...")
+                with open(upload_path, 'rb') as f:
+                    response = requests.post(
+                        url,
+                        files={'weights': (upload_filename, f, 'application/octet-stream')},
+                        data={
+                            'client_id':       client_id,
+                            'samples_trained': samples_trained,
+                            'time_seconds':    time_seconds,
+                        },
+                        timeout=(CONNECT_TIMEOUT, READ_TIMEOUT),
+                    )
+                    response.raise_for_status()
 
-            result = response.json()
-            print_status(f"[OK] Submission successful. Credits earned: {result.get('credits', 0)}")
-            return result
+                result = response.json()
+                print_status(f"[OK] Submission successful. Credits earned: {result.get('credits', 0)}")
+                return result
 
-        except (requests.exceptions.Timeout,
-                requests.exceptions.ConnectionError) as e:
-            wait = 2 ** attempt   # 2 → 4 → 8 → 16 s
-            if attempt < MAX_ATTEMPTS:
-                print_status(f"[WARNING] Upload failed (attempt {attempt}): {e}. Retrying in {wait}s...")
-                time.sleep(wait)
-            else:
-                raise RuntimeError(f"Failed to submit weights after {MAX_ATTEMPTS} attempts: {e}")
-        except requests.exceptions.RequestException as e:
-            raise RuntimeError(f"Failed to submit weights: {e}")
+            except (requests.exceptions.Timeout,
+                    requests.exceptions.ConnectionError) as e:
+                wait = 2 ** attempt   # 2 → 4 → 8 → 16 s
+                if attempt < MAX_ATTEMPTS:
+                    print_status(f"[WARNING] Upload failed (attempt {attempt}): {e}. Retrying in {wait}s...")
+                    time.sleep(wait)
+                else:
+                    raise RuntimeError(f"Failed to submit weights after {MAX_ATTEMPTS} attempts: {e}")
+            except requests.exceptions.RequestException as e:
+                raise RuntimeError(f"Failed to submit weights: {e}")
     finally:
         # Always clean up the compressed file
         if os.path.exists(compressed_path):

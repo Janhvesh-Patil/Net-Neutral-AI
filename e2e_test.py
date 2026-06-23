@@ -20,15 +20,18 @@ def main():
         env=dict(os.environ, PORT="5000", PYTHONIOENCODING="utf-8")
     )
     
-    # Wait for server to start
-    time.sleep(3)
-    
+    # Wait for server to start with retries
+    print("Waiting for server to start...")
     base_url = "http://localhost:5000"
-    try:
-        resp = requests.get(base_url)
-        print("Server is up!")
-    except Exception as e:
-        print(f"Failed to connect to server: {e}")
+    for attempt in range(10):
+        try:
+            resp = requests.get(base_url)
+            print("Server is up!")
+            break
+        except Exception:
+            time.sleep(1)
+    else:
+        print("Failed to connect to server after 10 attempts.")
         server_process.terminate()
         sys.exit(1)
         

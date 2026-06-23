@@ -14,7 +14,9 @@ Use the following settings when creating a new **Web Service** on Render:
 | **Branch** | `testing_site` |
 | **Runtime** | `Python` |
 | **Build Command** | `pip install -r backend/coordinator/requirements-render.txt` |
-| **Start Command** | `python backend/coordinator/server.py` |
+| **Start Command** | `gunicorn -w 1 --threads 4 -b 0.0.0.0:$PORT --timeout 300 backend.coordinator.server:app` |
+
+> **Why gunicorn?** Flask's built-in dev server is single-threaded and cannot handle concurrent client + browser requests. Gunicorn is the production WSGI server required for Render. The `-w 1 --threads 4` config uses one worker with 4 threads — matching the single-process requirement of the in-memory global state.
 
 ---
 

@@ -32,23 +32,30 @@
 
 
 // ── GLOBAL STATE ─────────────────────────────────────────────────
+// Global state
 const S = {
-  coordURL:        window.location.origin, // Set on coordinator setup
-  role:            null,                   // 'coordinator' | 'client'
-  clientId:        null,                   // e.g. 'client_A'
+  coordURL:        window.location.origin,
+  role:            null,
+  clientId:        null,
   sessionName:     '',
   expectedClients: 3,
-  jobId:           null,                   // TRD v2.1: active job_id
-  accuracyHistory: [],                     // [{round, acc}] for charts
-  selectedSession: null,                   // Session picked from lobby
-  signupRole:      null,                   // Role chosen during sign-up
+  jobId:           null,
+  accuracyHistory: [],
+  selectedSession: null,
+  signupRole:      null,
   datasetFile:     null,
   checkpointFile:  null,
 
-  pollCoord:       null,                   // Coordinator polling handle
-  pollClient:      null,                   // Client polling handle
+  pollCoord:       null,
+  pollClient:      null,
 
-  // sbSession: null,
+  // BUG-14 FIX: Initialize _lastClientMicro so the first tick doesn't always
+  // fire a micro-state log (it was undefined before, triggering on every status)
+  _lastClientMicro:   null,
+  // BUG-12 FIX: Track whether the 'done' credit log has fired this session
+  _doneFired:         false,
+  // BUG-15 FIX: Guard onTrainingDone from firing twice (SSE + polling)
+  _trainingDoneFired: false,
 };
 
 // Chart.js instances
@@ -159,10 +166,14 @@ function connectSSE() {
       liveLog('All rounds complete. Training finished.', 'done');
       liveLog(`Final accuracy: ${normPct(d.final_accuracy).toFixed(2)}%`, 'done');
       el('live-status-pill').textContent = fmtStatus('done');
-      onTrainingDone({
-        global_accuracy: d.final_accuracy,
-        round: d.total_rounds,
-      });
+      // BUG-15 FIX: guard against SSE + polling both calling onTrainingDone
+      if (!S._trainingDoneFired) {
+        S._trainingDoneFired = true;
+        onTrainingDone({
+          global_accuracy: d.final_accuracy,
+          round: d.total_rounds,
+        });
+      }
     });
 
     es.addEventListener('client_joined', (e) => {
@@ -183,15 +194,17 @@ function connectSSE() {
 
     es.onerror = () => {
       console.warn('SSE connection lost — falling back to polling');
+      // BUG-10 FIX: Fully close SSE before starting polling to prevent
+      // both running simultaneously and double-firing events.
       es.close();
       S.eventSource = null;
-      // Fallback to polling
-      startLivePolling();
+      // Only start polling if it's not already running
+      if (!S.pollCoord) startLivePolling();
     };
 
   } catch {
     // SSE not supported — fall back to polling
-    startLivePolling();
+    if (!S.pollCoord) startLivePolling();
   }
 }
 
@@ -199,16 +212,30 @@ function handleStatusUpdate(d) {
   setText('live-round', d.round ?? '—');
   if (d.total_rounds) setText('live-total', d.total_rounds);
   el('live-status-pill').textContent = fmtStatus(d.round_status);
+  
+  // Toggle active-training glow animations
+  document.querySelectorAll('.coord-panel, .client-panel').forEach(p => {
+    if (d.round_status === 'training') {
+      p.classList.add('active-training');
+    } else {
+      p.classList.remove('active-training');
+    }
+  });
+  
   if (d.global_accuracy > 0) {
     setText('live-acc-readout', normPct(d.global_accuracy).toFixed(1) + '%');
   }
   
-  // Render full accuracy history
+  // BUG-09 FIX: accuracy_history from server has raw floats (0–1).
+  // We convert once here via normPct() and store as percentages in S.accuracyHistory.
+  // pushAccuracyPoint() also converts once via normPct().
+  // The key rule: values in S.accuracyHistory are ALWAYS already in percentage form.
   if (d.accuracy_history && d.accuracy_history.length > 0 && accChart) {
     accChart.data.labels = [];
     accChart.data.datasets[0].data = [];
     S.accuracyHistory = [];
     d.accuracy_history.forEach(pt => {
+      // normPct() called exactly once here — result stored as pct
       const pct = parseFloat(normPct(pt.accuracy).toFixed(2));
       S.accuracyHistory.push({ round: pt.round, acc: pct });
       accChart.data.labels.push(`R${pt.round}`);
@@ -611,9 +638,17 @@ async function submitJob() {
 
   const jobName = el('job-name').value.trim() || 'Unnamed Job';
   const rounds  = parseInt(el('job-rounds').value) || 5;
+  // BUG-11 FIX: null-check job-epochs — if element doesn't exist, don't crash
+  const epochsEl = el('job-epochs');
+  const epochs = epochsEl ? (parseInt(epochsEl.value) || 2) : 2;
 
   // Reset state from any previous job
-  S.accuracyHistory = [];
+  S.accuracyHistory      = [];
+  // BUG-12 FIX: Reset done flags so second session logs credits and completes correctly
+  S._doneFired           = false;
+  S._trainingDoneFired   = false;
+  // BUG-14: also reset micro state tracking
+  S._lastClientMicro     = null;
 
   msg('job-msg', 'Uploading dataset…', 'wait');
   el('btn-launch').disabled = true;
@@ -659,7 +694,7 @@ async function submitJob() {
       body: {
         client_count: S.expectedClients,
         rounds: rounds,
-        epochs: parseInt(el('job-epochs').value) || 2
+        epochs: epochs
       },
     });
 
@@ -696,8 +731,17 @@ async function submitJob() {
 function initLiveView() {
   initAccuracyChart();
   initNetworkCanvas();
-  // Try SSE first, fall back to polling
+  // BUG-13 FIX: Reset epoch tab state on every new live view session.
+  // Without this, tabs and data from the previous training run accumulate.
+  epochTabsState = { activeRound: 1, data: {} };
+  const tabsContainer = el('epoch-tabs');
+  if (tabsContainer) tabsContainer.innerHTML = '';
+  const panel = el('epoch-metrics-panel');
+  if (panel) panel.innerHTML = '';
+  // Try SSE first; BUG-10 FIX: polling only starts on SSE failure (inside connectSSE)
   connectSSE();
+  // BUG-10 FIX: Don't start polling here when SSE may succeed.
+  // startLivePolling() is called by connectSSE() onerror handler as fallback.
 }
 
 // ── Chart.js Accuracy Chart ───────────────────────────────────
@@ -1034,7 +1078,11 @@ function startLivePolling() {
           liveLog(`Final accuracy: ${normPct(d.global_accuracy).toFixed(2)}%`, 'done');
           clearInterval(S.pollCoord);
           S.pollCoord = null;
-          onTrainingDone(d);
+          // BUG-15 FIX: guard against SSE + polling both calling onTrainingDone
+          if (!S._trainingDoneFired) {
+            S._trainingDoneFired = true;
+            onTrainingDone(d);
+          }
         }
 
         // Push new accuracy point to chart
@@ -1206,6 +1254,11 @@ function updateLiveLeaderboard(lb) {
 }
 
 function onTrainingDone(d) {
+  // BUG-15: Guard against double-fire when both SSE and polling call this.
+  // (e.g. SSE training_done event fires, then polling tick also sees status==='done')
+  if (S._trainingDoneFired) return;
+  S._trainingDoneFired = true;
+
   // Populate results screen
   const acc = d.global_accuracy
     ? normPct(d.global_accuracy).toFixed(1) + '%'

@@ -80,9 +80,6 @@ data_shards = {}      # {client_id: DataFrame} - in-memory cache of divided data
 uploaded_dataset_path = os.path.join(COORDINATOR_DIR, 'uploaded_dataset.csv')
 model_downloaded = False  # Flag to track if coordinator has downloaded the final model
 
-# Thread safety lock — protects all global state mutations across concurrent requests
-state_lock = threading.Lock()
-
 # Cache for evaluation
 _cached_val_loader = None
 
@@ -126,7 +123,14 @@ def run_evaluation_from_path(model_path: str, round_number: int) -> float:
     prev_accuracy = credits._get_previous_accuracy(round_number, credits.DB_PATH) if round_number > 1 else 0.0
     print(evaluate.format_eval_result(result, round_num=round_number, total_rounds=TOTAL_ROUNDS, prev_accuracy=prev_accuracy))
     
-    return result.accuracy
+    # Free memory to prevent OOM on 512MB limit
+    accuracy = result.accuracy
+    del model
+    del result
+    import gc
+    gc.collect()
+    
+    return accuracy
 
 # --- Core Aggregation Logic ---
 def _process_round_completion(current_round_copy, round_start_time_copy, weights_copy, samples_copy):
@@ -203,9 +207,6 @@ def _process_round_completion(current_round_copy, round_start_time_copy, weights
     else:
         with state_lock:
             current_round += 1
-            # FIX 1.1: After round 1, data is already distributed — go directly
-            # to 'active' so check_round_completion() doesn't return early.
-            # Only the first /start_training call uses 'data_distributing'.
             round_status = 'active'
             round_start_time = datetime.datetime.now()
         print(f"\n[Coordinator] Ready for Round {current_round}")
@@ -313,8 +314,10 @@ def submit():
         except (ValueError, TypeError):
             return jsonify({'error': 'Invalid samples_trained'}), 400
 
+        # BUG-06: Use .get() to avoid KeyError if field is missing,
+        # which would lock state_lock permanently.
         try:
-            time_seconds = float(request.form['time_seconds'])
+            time_seconds = float(request.form.get('time_seconds', 0))
         except (ValueError, TypeError):
             return jsonify({'error': 'Invalid time_seconds'}), 400
 
@@ -394,18 +397,6 @@ def results():
     return jsonify({
         'final_accuracy': global_accuracy,
         'total_rounds_completed': current_round if round_status == 'done' else current_round - 1
-    })
-
-
-@app.route('/api/config', methods=['GET'])
-def api_config():
-    """Returns server configuration for the frontend and clients."""
-    return jsonify({
-        'max_clients': 3,
-        'total_rounds': TOTAL_ROUNDS,
-        'current_round': current_round,
-        'round_status': round_status,
-        'epochs': LOCAL_EPOCHS
     })
 
 
@@ -532,8 +523,13 @@ def get_vocab():
 
 @app.route('/start_training', methods=['POST'])
 def start_training():
-    """Frontend signals to begin data distribution."""
+    """Frontend signals to begin data distribution. Resets ALL global state so that
+    a second training session on Render starts cleanly (BUG-04 fix).
+    """
     global round_status, data_shards, TOTAL_ROUNDS, LOCAL_EPOCHS
+    global current_round, accuracy_history, epoch_reports, client_micro_states
+    global submitted_weights, submitted_samples, registered_clients
+    global client_registry, model_downloaded, _cached_val_loader
 
     data = request.get_json()
     num_clients = data.get('client_count')
@@ -560,6 +556,21 @@ def start_training():
         return jsonify({
             'error': f'Only {len(registered_clients)} clients registered, but {num_clients} expected'
         }), 400
+
+    # --- BUG-04: Full state reset for a clean second session ---
+    with state_lock:
+        current_round        = 1
+        accuracy_history     = []
+        epoch_reports        = {}
+        client_micro_states  = {}
+        submitted_weights    = {}
+        submitted_samples    = {}
+        model_downloaded     = False
+        _cached_val_loader   = None
+        # Keep registered_clients — they are still connected; just clear session flags
+        client_registry      = {cid: {'data_received': False} for cid in registered_clients}
+        data_shards          = {}
+    print("[Coordinator] Global state reset for new training session.")
 
     try:
         # Divide dataset among registered clients
@@ -592,9 +603,14 @@ def get_data_shard():
     if not client_id:
         return jsonify({'error': 'client_id missing'}), 400
 
-    # Only distribute data in first round (data_distributing state)
-    if round_status != 'data_distributing':
+    # BUG-03 FIX: Allow shard download when status is 'data_distributing' OR 'active'
+    # in round 1. The race: first client download triggers status→active before the
+    # second client calls this endpoint (may be <1s later). Allowing 'active' here
+    # fixes multi-client sessions. After round 1, data is already distributed.
+    if round_status not in ('data_distributing', 'active'):
         return jsonify({'error': 'Data distribution not active'}), 400
+    if current_round != 1:
+        return jsonify({'error': 'Data already distributed (past round 1)'}), 400
 
     if client_id not in data_shards:
         return jsonify({'error': f'No shard for {client_id}'}), 400
@@ -611,8 +627,6 @@ def get_data_shard():
         print(f"[Coordinator] Data shard sent to {client_id}")
 
         # Transition to 'active' immediately when the FIRST client requests a shard.
-        # Previously this waited for ALL clients, which caused a deadlock if
-        # client_registry was wiped by a server restart.
         with state_lock:
             if round_status == 'data_distributing':
                 round_status = 'active'
@@ -677,14 +691,16 @@ def cleanup_session_data():
         os.remove(f)
         cleaned.append(os.path.basename(f))
 
-    # 4. Delete the trained checkpoint (coordinator already downloaded it)
-    # Keep the pretrained backup for next session
+    # 4. BUG-16 FIX: Only delete checkpoint.pt if the module-level restore confirmed it
+    # works under WSGI.
     if os.path.exists(MODEL_PATH):
         PRETRAINED_BACKUP = os.path.join(COORDINATOR_DIR, 'checkpoint_pretrained_backup.pt')
-        if os.path.exists(PRETRAINED_BACKUP):
-            # Safe to delete — can be restored from backup on next startup
-            os.remove(MODEL_PATH)
-            cleaned.append('checkpoint.pt')
+        if os.path.exists(PRETRAINED_BACKUP) and _checkpoint_restored:
+            # Restore baseline immediately so the next session starts clean
+            import shutil
+            shutil.copy2(PRETRAINED_BACKUP, MODEL_PATH)
+            print("[Coordinator] Checkpoint restored to pretrained baseline after cleanup.")
+            cleaned.append('checkpoint.pt (restored to baseline)')
 
     # 5. Clear in-memory caches
     data_shards.clear()
@@ -765,7 +781,9 @@ def sse_stream():
 
             while True:
                 try:
-                    msg = q.get(timeout=30)
+                    # BUG-18: 20s timeout keeps keepalive within Render's 30s idle
+                    # connection close window (was 30s, which fired too late).
+                    msg = q.get(timeout=20)
                     yield msg
                 except queue.Empty:
                     # Send keepalive to prevent connection timeout
@@ -798,15 +816,22 @@ def serve_frontend():
     # In production if frontend not found, return API health instead of 404
     return jsonify({'status': 'ok', 'service': 'Net-Neutral AI Coordinator', 'version': '2.2'}), 200
 
-if __name__ == '__main__':
-    
-    # Use absolute MODEL_PATH for the startup safety check
-    # Checkpoint reset — always start from the clean pretrained baseline
-    PRETRAINED_BACKUP = os.path.join(COORDINATOR_DIR, 'checkpoint_pretrained_backup.pt')
+# --- BUG-05: Module-level checkpoint restore ---
+# This block runs whether the server is started via `python server.py` OR
+# via gunicorn (which imports the module directly, never hitting __main__).
+# Ensures every deploy starts from the clean pretrained baseline.
+_checkpoint_restored = False
 
+def _restore_checkpoint_baseline():
+    """Restore checkpoint.pt from the pretrained backup at process startup.
+    Called at module import time so gunicorn workers also get a clean baseline.
+    """
+    global _checkpoint_restored
+    PRETRAINED_BACKUP = os.path.join(COORDINATOR_DIR, 'checkpoint_pretrained_backup.pt')
     if os.path.exists(PRETRAINED_BACKUP):
         import shutil
         shutil.copy2(PRETRAINED_BACKUP, MODEL_PATH)
+        _checkpoint_restored = True
         print("[Coordinator] [OK] Checkpoint reset to pretrained baseline")
     elif not os.path.exists(MODEL_PATH):
         print(f"[Coordinator] ⚠  No checkpoint found. Generating dummy for startup.")
@@ -814,6 +839,11 @@ if __name__ == '__main__':
     else:
         print("[Coordinator] ⚠  No backup found — using existing checkpoint.pt")
 
+# Run immediately at import (covers both direct run and gunicorn)
+_restore_checkpoint_baseline()
+
+
+if __name__ == '__main__':
     # Bind to PORT environment variable if available (e.g. on Render), default to 5000
     port = int(os.environ.get("PORT", 5000))
     print("[Coordinator] Starting Net-Neutral AI Coordinator...")

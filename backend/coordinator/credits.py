@@ -89,8 +89,12 @@ def init_db(db_path: str = DB_PATH) -> None:
     conn   = _connect(db_path)
     cursor = conn.cursor()
 
-    # Enable WAL mode for better concurrent read performance
-    cursor.execute("PRAGMA journal_mode=WAL")
+    # BUG-07 FIX: Use DELETE journal mode instead of WAL.
+    # WAL creates .db-wal and .db-shm sidecar files that can become orphaned on
+    # Render's ephemeral filesystem after a restart (WAL not checkpointed),
+    # silently corrupting the database. DELETE is the SQLite default and is safe
+    # on ephemeral storage.
+    cursor.execute("PRAGMA journal_mode=DELETE")
 
     cursor.executescript("""
         -- 1. Clients table (NEW — replaces in-memory client_registry)
@@ -327,20 +331,10 @@ def get_client_total_credits(
     return total
 
 
-def get_submitted_clients(
-    round_num: int,
-    db_path:   str = DB_PATH,
-) -> set:
-    """Return set of client_ids that have submitted for a given round."""
-    conn   = _connect(db_path)
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT client_id FROM credits WHERE round = ?",
-        (round_num,)
-    )
-    result = {row[0] for row in cursor.fetchall()}
-    conn.close()
-    return result
+# BUG-20 FIX: Removed duplicate get_submitted_clients() that returned a set.
+# The authoritative implementation returning a list is defined below at line ~504.
+# Two definitions meant Python silently used the second (list) version, but
+# the first (set) definition was dead code causing confusion.
 
 
 # -----------------------------------------------------------------------------
@@ -511,6 +505,9 @@ def get_submitted_clients(round_num: int, db_path: str = DB_PATH) -> List[str]:
     )
     rows = cursor.fetchall()
     conn.close()
+    # NOTE: The first definition of get_submitted_clients() was removed (BUG-20).
+    # It returned a `set` and was silently shadowed by the list-returning version
+    # below (Python uses the last definition). Keeping only the canonical version.
     return [row[0] for row in rows]
 
 

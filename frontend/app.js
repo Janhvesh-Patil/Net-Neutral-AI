@@ -1585,7 +1585,14 @@ function startClientPolling() {
       } else if (d.round_status === 'done') {
         badge.textContent = 'Complete';
         badge.className   = 'badge badge-client';
-        log('client-log', `Training complete! Final credits: ${d.total_credits}`, 'done');
+        updateStatusVisualizer('done', 'c-');
+        setText('client-stat-status', 'Training Complete');
+        // Log with actual credits from this tick (not previous)
+        if (!S._doneFired) {
+          S._doneFired = true;
+          const finalCr = d.total_credits || 0;
+          log('client-log', `🎉 Training complete! Final credits: ${finalCr.toLocaleString()} pts`, 'done');
+        }
         clearInterval(S.pollClient);
         S.pollClient = null;
       }
@@ -1600,13 +1607,19 @@ function startClientPolling() {
           addTimelineItemElement(tl, r.round, 'done', r.points_earned);
         });
         
-        // Add current active round if not in history
-        if (d.current_round > 0 && d.round_status !== 'done' && !hist.find(r => r.round === d.current_round)) {
+        // Add current active round only when it's not yet in history
+        const roundInHistory = hist.find(r => r.round === d.current_round);
+        if (d.current_round > 0 && d.round_status !== 'done' && !roundInHistory) {
           addTimelineItemElement(tl, d.current_round, d.round_status, 0);
         }
         
         if (tl.children.length === 0) {
-          tl.innerHTML = `<div class="timeline-empty mono text-muted">Training hasn't started yet</div>`;
+          // Only show placeholder if round hasn't started yet at all
+          if (!d.current_round || d.current_round === 0) {
+            tl.innerHTML = `<div class="timeline-empty mono text-muted">Waiting for round 1…</div>`;
+          } else {
+            addTimelineItemElement(tl, d.current_round, d.round_status, 0);
+          }
         }
       }
       
@@ -1888,7 +1901,12 @@ function updateStatusVisualizer(status, prefix = '') {
   if(dl) dl.style.display = 'none';
   if(ul) ul.style.display = 'none';
 
-  if (status === 'training' || status === 'active') {
+  if (status === 'done') {
+    const complete = el(prefix + 'status-img-complete');
+    if (complete) complete.style.display = 'block';
+    else idle.style.display = 'block';
+    label.textContent = 'Training Complete ✓';
+  } else if (status === 'training' || status === 'active') {
     if(active) active.style.display = 'block';
     label.textContent = 'Training Locally...';
   } else if (status === 'downloading' || status === 'data_distributing') {

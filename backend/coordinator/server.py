@@ -38,6 +38,9 @@ def broadcast_event(event_type: str, data: dict) -> None:
 # In-memory store for per-epoch training data reported by clients
 epoch_reports = {}   # {client_id: [{epoch, loss, accuracy, samples, round}]}
 
+# Micro-states for detailed UI animations (downloading, training, uploading, idle)
+client_micro_states = {} # {client_id: state_string}
+
 app = Flask(
     __name__,
     static_folder=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'frontend'),
@@ -386,12 +389,26 @@ def api_client_status(client_id):
         'total_credits': total_credits,
         'current_round': current_round,
         'round_status': round_status,
+        'micro_status': client_micro_states.get(client_id, round_status),
         'total_rounds': TOTAL_ROUNDS,
         'has_submitted_this_round': client_id in submitted,
         'global_accuracy': global_accuracy,
         'round_history': round_history,
         'epoch_reports': epoch_reports.get(client_id, []),
     })
+
+@app.route('/api/client_state', methods=['POST'])
+def api_client_state():
+    """Updates a client's specific micro-state (e.g. downloading, training, uploading)."""
+    data = request.get_json() or {}
+    client_id = data.get('client_id')
+    state = data.get('state')
+    
+    if not client_id or not state:
+        return jsonify({'error': 'Missing client_id or state'}), 400
+        
+    client_micro_states[client_id] = state
+    return jsonify({'status': 'ok'})
 
 
 # --- NEW ENDPOINTS FOR DATA DISTRIBUTION ---

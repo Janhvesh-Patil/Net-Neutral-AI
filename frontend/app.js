@@ -202,7 +202,6 @@ function handleStatusUpdate(d) {
   if (d.global_accuracy > 0) {
     setText('live-acc-readout', normPct(d.global_accuracy).toFixed(1) + '%');
   }
-  updateStatusVisualizer(d.round_status, '');
   
   // Render full accuracy history
   if (d.accuracy_history && d.accuracy_history.length > 0 && accChart) {
@@ -1448,9 +1447,9 @@ function startClientPolling() {
 
       setText('client-stat-credits', (d.total_credits || 0).toLocaleString());
       setText('client-stat-round',   `${d.current_round || '—'} / ${d.total_rounds || '—'}`);
-      setText('client-stat-status',  fmtStatus(d.round_status));
+      setText('client-stat-status',  fmtStatus(d.micro_status || d.round_status));
       setText('client-rounds-label', `${d.current_round || 0} / ${d.total_rounds || '?'} rounds`);
-      updateStatusVisualizer(d.round_status, 'c-');
+      updateStatusVisualizer(d.micro_status || d.round_status, 'c-');
 
       if (d.global_accuracy > 0) {
         setText('client-stat-acc', normPct(d.global_accuracy).toFixed(1) + '%');
@@ -1500,7 +1499,7 @@ function startClientPolling() {
   };
 
   tick();
-  S.pollClient = setInterval(tick, 3000);
+  S.pollClient = setInterval(tick, 1000);
 }
 
 function addTimelineItemElement(tl, round, status, creditsEarned) {
@@ -1734,22 +1733,32 @@ function fmtStatus(s) {
 // ════════════════════════════════════════════════════════════════
 function updateStatusVisualizer(status, prefix = '') {
   const idle = el(prefix + 'status-img-idle');
-  const active = el(prefix + 'status-img-active');
+  const active = el(prefix + 'status-img-training');
   const agg = el(prefix + 'status-img-agg');
+  const dl = el(prefix + 'status-img-downloading');
+  const ul = el(prefix + 'status-img-uploading');
   const label = el(prefix + 'status-vis-label');
   
-  if (!idle || !active || !agg || !label) return;
+  if (!idle || !label) return; // If coordinator prefix and it was removed
 
   idle.style.display = 'none';
-  active.style.display = 'none';
-  agg.style.display = 'none';
+  if(active) active.style.display = 'none';
+  if(agg) agg.style.display = 'none';
+  if(dl) dl.style.display = 'none';
+  if(ul) ul.style.display = 'none';
 
-  if (status === 'active') {
-    active.style.display = 'block';
+  if (status === 'training' || status === 'active') {
+    if(active) active.style.display = 'block';
     label.textContent = 'Training Locally...';
+  } else if (status === 'downloading') {
+    if(dl) dl.style.display = 'block';
+    label.textContent = 'Downloading Model...';
+  } else if (status === 'uploading') {
+    if(ul) ul.style.display = 'block';
+    label.textContent = 'Sending Weights...';
   } else if (status === 'aggregating') {
-    agg.style.display = 'block';
-    label.textContent = 'Aggregating Weights...';
+    if(agg) agg.style.display = 'block';
+    label.textContent = 'Coordinator Aggregating...';
   } else if (status === 'done') {
     idle.style.display = 'block';
     label.textContent = 'Training Complete';

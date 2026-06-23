@@ -133,6 +133,13 @@ def poll_for_next_round(current_round: int) -> dict:
     url = f"{config.BASE_URL}/status"
     wait_start = time.time()
 
+    # Determine global status to report idle vs debating
+    try:
+        st = requests.get(url, timeout=5).json()
+        report_micro_state(config.CLIENT_ID, st.get('round_status', 'idle'))
+    except Exception:
+        pass
+
     print_status(f"Waiting for round {current_round + 1}...")
 
     while True:
@@ -152,11 +159,15 @@ def poll_for_next_round(current_round: int) -> dict:
                 return status
 
             if elapsed % 10 == 0:
-                print_status(f"Waiting for round {current_round + 1}... ({elapsed}s elapsed)")
+                if status.get('round_status') == 'aggregating':
+                    report_micro_state(config.CLIENT_ID, 'aggregating')
+                else:
+                    report_micro_state(config.CLIENT_ID, 'idle')
 
             time.sleep(config.POLL_INTERVAL_SECS)
 
         except requests.exceptions.ReadTimeout:
+            report_micro_state(config.CLIENT_ID, 'aggregating')
             print_status(f"Coordinator is aggregating global model... (this may take 1-2 mins on free tier)")
             time.sleep(5)
         except requests.exceptions.RequestException as e:
@@ -199,11 +210,27 @@ def download_data_shard(client_id: str, save_path: str, max_retries: int = 3) ->
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# MICRO-STATE REPORTING
+# ─────────────────────────────────────────────────────────────────────────────
+def report_micro_state(client_id: str, state: str) -> None:
+    """Updates the client dashboard UI with exact micro-state (e.g. downloading, training)."""
+    try:
+        requests.post(
+            f"{config.BASE_URL}/api/client_state",
+            json={'client_id': client_id, 'state': state},
+            timeout=5
+        )
+    except Exception:
+        pass
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # MAIN CLIENT LOOP
 # ─────────────────────────────────────────────────────────────────────────────
 
 def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
-
+    config.CLIENT_ID = client_id # set it globally for report_micro_state
+    
     # ── Step 0: Fetch dynamic config from coordinator ─────────────────────────
     try:
         resp = requests.get(f"{config.BASE_URL}/api/config", timeout=5)
@@ -219,6 +246,7 @@ def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
     print_banner(client_id)
 
     # ── Step 1: Register with coordinator ─────────────────────────────────────
+    report_micro_state(client_id, 'idle')
     current_round = register_with_coordinator(client_id)
 
     # ── Step 2: Download data shard if not cached (NEW) ─────────────────────────
@@ -228,6 +256,7 @@ def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
     # FIX 1.5: Download global vocabulary to ensure token consistency
     vocab_save_path = os.path.join(config.LOCAL_DATA_DIR, 'vocab.json')
     if not os.path.exists(vocab_save_path):
+        report_micro_state(client_id, 'downloading')
         print_status("Downloading global vocabulary from coordinator...")
         try:
             v_resp = requests.get(f"{config.BASE_URL}/vocab", timeout=30)
@@ -277,6 +306,7 @@ def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
 
         print_status(f"Data shard not found locally. Downloading from coordinator...")
         try:
+            report_micro_state(client_id, 'downloading')
             download_data_shard(client_id, data_shard_path)
         except Exception as e:
             print_status(f"[ERROR] {e}")
@@ -329,6 +359,7 @@ def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
         model_temp.close()
         
         try:
+            report_micro_state(client_id, 'downloading')
             download_global_model(model_path)
 
             model = TransformerClassifier()
@@ -353,6 +384,7 @@ def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
                 except Exception:
                     pass  # Non-critical — don't interrupt training
 
+            report_micro_state(client_id, 'training')
             state_dict, samples_trained, time_seconds, final_loss = train_one_round(
                 model=model,
                 dataloader=dataloader,
@@ -371,6 +403,7 @@ def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
             save_weights(state_dict, weights_path)
             print_status(f"[OK] Weights saved to {weights_path}")
 
+            report_micro_state(client_id, 'uploading')
             result = submit_weights(
                 client_id=client_id,
                 weights_path=weights_path,

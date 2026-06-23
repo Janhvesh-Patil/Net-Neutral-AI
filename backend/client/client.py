@@ -133,14 +133,10 @@ def poll_for_next_round(current_round: int) -> dict:
     url = f"{config.BASE_URL}/status"
     wait_start = time.time()
 
-    # Determine global status to report idle vs debating
-    try:
-        st = requests.get(url, timeout=5).json()
-        report_micro_state(config.CLIENT_ID, st.get('round_status', 'idle'))
-    except Exception:
-        pass
-
     print_status(f"Waiting for round {current_round + 1}...")
+    report_micro_state(config.CLIENT_ID, 'idle')
+
+    _last_reported_state = None
 
     while True:
         try:
@@ -152,26 +148,33 @@ def poll_for_next_round(current_round: int) -> dict:
 
             if status.get('round_status') == 'done':
                 print_status("[OK] All rounds complete!")
+                report_micro_state(config.CLIENT_ID, 'idle')
                 return status
 
             if status.get('round') > current_round:
                 print_status(f"[OK] Round {status.get('round')} started!")
                 return status
 
+            # Report micro-state on every tick (not just every 10s)
+            current_gs = status.get('round_status', 'idle')
+            micro = 'aggregating' if current_gs == 'aggregating' else 'idle'
+            if micro != _last_reported_state:
+                report_micro_state(config.CLIENT_ID, micro)
+                _last_reported_state = micro
+
             if elapsed % 10 == 0:
-                if status.get('round_status') == 'aggregating':
-                    report_micro_state(config.CLIENT_ID, 'aggregating')
-                else:
-                    report_micro_state(config.CLIENT_ID, 'idle')
+                print_status(f"Waiting for round {current_round + 1}... ({elapsed}s elapsed)")
 
             time.sleep(config.POLL_INTERVAL_SECS)
 
         except requests.exceptions.ReadTimeout:
             report_micro_state(config.CLIENT_ID, 'aggregating')
+            _last_reported_state = 'aggregating'
             print_status(f"Coordinator is aggregating global model... (this may take 1-2 mins on free tier)")
             time.sleep(5)
         except requests.exceptions.RequestException as e:
             if "Read timed out" in str(e) or "ReadTimeout" in str(e):
+                report_micro_state(config.CLIENT_ID, 'aggregating')
                 print_status(f"Coordinator is aggregating global model... (this may take 1-2 mins on free tier)")
             else:
                 print_status(f"[WARNING] Status poll failed: {e}. Retrying...")

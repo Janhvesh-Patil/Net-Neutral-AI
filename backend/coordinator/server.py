@@ -332,17 +332,20 @@ def submit():
 
 @app.route('/status', methods=['GET'])
 def status():
-    """Polled every 5 seconds by clients to check state machine."""
+    """Polled every 3 seconds by clients to check state machine."""
     # Include leaderboard data for the live training view
     lb = credits.get_leaderboard_dicts()
+    submitted_this_round = list(submitted_weights.keys())
     return jsonify({
         'round': current_round,
         'round_status': round_status,
         'active_clients': list(registered_clients),
+        'clients_submitted': submitted_this_round,
         'global_accuracy': global_accuracy,
         'accuracy_history': accuracy_history,
         'total_rounds': TOTAL_ROUNDS,
         'leaderboard': lb,
+        'client_micro_states': client_micro_states,
         'clients': [
             {'id': cid, 'ip': credits.get_client(cid).ip_address if credits.get_client(cid) else 'unknown'}
             for cid in registered_clients

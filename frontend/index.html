@@ -342,6 +342,19 @@
             <div class="panel-foot mono" id="client-count-label">Connected: 0 client(s)</div>
           </div>
 
+          <!-- Live Training Status Banner -->
+          <div class="dash-panel hud-panel coord-panel" id="coord-status-panel" style="padding:16px 20px;">
+            <div class="panel-head" style="margin-bottom:8px;">
+              <h3 class="panel-title mono">TRAINING PHASE</h3>
+            </div>
+            <div id="coord-status-banner" style="font-family:'Space Mono',monospace;font-size:13px;font-weight:700;letter-spacing:0.04em;color:var(--muted);margin-bottom:6px;">
+              ⏳  Waiting for Training Job
+            </div>
+            <div id="coord-status-banner-desc" style="font-size:12px;color:var(--muted);line-height:1.6;">
+              No active training session. Use "+ New Training Job" to begin.
+            </div>
+          </div>
+
           <!-- Training log panel -->
           <div class="dash-panel hud-panel">
             <div class="panel-head">
@@ -543,16 +556,24 @@
           </div>
         </div>
 
-        <!-- Panel E: Status Visualizer -->
-        <div class="t-panel hud-panel coord-panel" id="panel-status-vis">
+        <!-- Panel E: Round Progress -->
+        <div class="t-panel hud-panel coord-panel" id="panel-round-progress">
           <div class="panel-head">
-            <h3 class="panel-title mono">TRAINING STATUS</h3>
+            <h3 class="panel-title mono">ROUND PROGRESS</h3>
+            <span class="mono text-muted" id="live-elapsed" style="font-size:11px">—</span>
           </div>
-          <div class="status-visualizer" id="status-vis-container">
-            <img src="assets/computer_sleeping.png" id="status-img-idle" class="status-img anim-sleep" alt="Sleeping">
-            <img src="assets/computer_studying.png" id="status-img-active" class="status-img anim-study" alt="Studying" style="display:none">
-            <img src="assets/computers_debating.png" id="status-img-agg" class="status-img anim-debate" alt="Debating" style="display:none">
-            <div class="mono small-caps text-muted" id="status-vis-label" style="margin-top:8px;">Awaiting Start...</div>
+          <!-- Current phase explanation -->
+          <div id="live-phase-box" style="padding:12px 0 10px">
+            <div class="live-phase-icon" id="live-phase-icon">⏳</div>
+            <div class="live-phase-title" id="live-phase-title">Initialising…</div>
+            <div class="live-phase-desc" id="live-phase-desc">Waiting for clients to connect and the training session to begin.</div>
+          </div>
+          <!-- Per-client submission tracker -->
+          <div class="panel-head" style="margin-top:8px; border-top:1px solid rgba(255,255,255,0.06); padding-top:10px">
+            <h3 class="panel-title mono" style="font-size:10px">CLIENT SUBMISSIONS</h3>
+          </div>
+          <div id="live-client-tracker" style="display:flex; flex-direction:column; gap:6px; padding:4px 0">
+            <div class="mono text-muted" style="font-size:11px">Waiting for clients…</div>
           </div>
         </div>
 
@@ -784,9 +805,9 @@
             <div class="status-visualizer" id="client-status-vis-container">
               <img src="assets/computer_sleeping.png" id="c-status-img-idle" class="status-img anim-sleep" alt="Sleeping">
               <img src="assets/client_downloading.png" id="c-status-img-downloading" class="status-img anim-study" alt="Downloading" style="display:none">
-              <img src="assets/computer_studying.png" id="c-status-img-training" class="status-img anim-study" alt="Studying" style="display:none">
+              <img src="assets/computer_studying.png" id="c-status-img-training" class="status-img anim-study" alt="Training" style="display:none">
               <img src="assets/client_uploading.png" id="c-status-img-uploading" class="status-img anim-study" alt="Uploading" style="display:none">
-              <img src="assets/computers_debating.png" id="c-status-img-agg" class="status-img anim-debate" alt="Debating" style="display:none">
+              <img src="assets/computers_debating.png" id="c-status-img-agg" class="status-img anim-debate" alt="Aggregating" style="display:none">
               <div class="mono small-caps text-muted" id="c-status-vis-label" style="margin-top:8px;">Waiting for jobs...</div>
             </div>
           </div>

@@ -487,7 +487,7 @@ function startDashboardPolling() {
   clearInterval(S.pollCoord);
   refreshClients();
   refreshCoordStatus();
-  S.pollCoord = setInterval(() => { refreshClients(); refreshCoordStatus(); }, 4000);
+  S.pollCoord = setInterval(() => { refreshClients(); refreshCoordStatus(); }, 2000);
 }
 
 async function refreshClients() {
@@ -531,13 +531,6 @@ async function refreshClients() {
 }
 
 async function refreshCoordStatus() {
-  /*
-   * INTEGRATION: GET /status
-   * Returns: { round, round_status, global_accuracy, clients_submitted }
-   *
-   * TRD v2.1: GET /status/{job_id}
-   * Returns: { round, round_status, accuracy, clients_submitted, leaderboard }
-   */
   try {
     const path = S.jobId ? `/status/${S.jobId}` : '/status';
     const d    = await api(path);
@@ -548,6 +541,16 @@ async function refreshCoordStatus() {
     if (d.global_accuracy > 0) {
       const pct = normPct(d.global_accuracy);
       setText('coord-stat-acc', pct.toFixed(1) + '%');
+    }
+
+    // Update the coordinator dashboard status banner
+    const bannerEl = el('coord-status-banner');
+    const bannerDescEl = el('coord-status-banner-desc');
+    if (bannerEl && bannerDescEl) {
+      const phaseInfo = getPhaseInfo(d.round_status);
+      bannerEl.textContent = `${phaseInfo.icon}  ${phaseInfo.title}`;
+      bannerDescEl.textContent = phaseInfo.desc;
+      bannerEl.style.color = phaseInfo.color;
     }
   } catch { /* backend may not be running yet */ }
 }
@@ -1046,6 +1049,9 @@ function startLivePolling() {
       // Update leaderboard panel
       if (d.leaderboard && d.leaderboard.length) updateLiveLeaderboard(d.leaderboard);
 
+      // Update Round Progress panel
+      updateRoundProgressPanel(d);
+
       // Update network graph clients + packets
       if (netGraph) {
         const ids = (d.clients || []).map(c => c.id || c.client_id);
@@ -1060,12 +1066,101 @@ function startLivePolling() {
   };
 
   tick();
-  S.pollCoord = setInterval(tick, 5000);
+  S.pollCoord = setInterval(tick, 3000);
 }
 
 function liveLog(msg, type = 'info') {
   log('live-log', msg, type);
 }
+
+// ── Round Progress Panel ──────────────────────────────────────
+
+let _roundStartedAt = null;
+let _elapsedTimer   = null;
+
+function getPhaseInfo(status) {
+  const phases = {
+    waiting_for_clients: {
+      icon: '⏳', color: 'var(--muted)',
+      title: 'Waiting for Clients',
+      desc:  'The coordinator is ready. Waiting for client nodes to connect and register before training can begin.',
+    },
+    data_distributing: {
+      icon: '📦', color: 'var(--coord)',
+      title: 'Distributing Data Shards',
+      desc:  'The dataset is being split and sent to each client node. Each client receives only their private slice — raw data never leaves their machine.',
+    },
+    active: {
+      icon: '🧠', color: 'var(--coord)',
+      title: 'Clients Training Locally',
+      desc:  'All client nodes are training the model on their private data. No raw data is shared — only gradient updates will be sent back.',
+    },
+    aggregating: {
+      icon: '⚡', color: '#ffd166',
+      title: 'Federated Averaging (FedAvg)',
+      desc:  'The coordinator is aggregating weight updates from all clients using Federated Averaging. A new, improved global model is being computed.',
+    },
+    done: {
+      icon: '✅', color: 'var(--client)',
+      title: 'Training Complete',
+      desc:  'All rounds finished! The final global model is ready to download. View the accuracy history below.',
+    },
+  };
+  return phases[status] || {
+    icon: '⏳', color: 'var(--muted)',
+    title: fmtStatus(status),
+    desc:  'Processing…',
+  };
+}
+
+function updateRoundProgressPanel(d) {
+  const iconEl   = el('live-phase-icon');
+  const titleEl  = el('live-phase-title');
+  const descEl   = el('live-phase-desc');
+  const tracker  = el('live-client-tracker');
+  const elapsedEl = el('live-elapsed');
+  if (!iconEl || !titleEl || !descEl) return;
+
+  const phase = getPhaseInfo(d.round_status);
+  iconEl.textContent  = phase.icon;
+  titleEl.textContent = phase.title;
+  titleEl.style.color = phase.color;
+  descEl.textContent  = phase.desc;
+
+  // Client submission tracker
+  if (tracker && d.clients && d.clients.length) {
+    const submitted = new Set(d.clients_submitted || []);
+    tracker.innerHTML = '';
+    d.clients.forEach(c => {
+      const cid   = c.id || c.client_id || c;
+      const done  = submitted.has(cid);
+      const micro = (d.client_micro_states || {})[cid] || '';
+      const stateLabel = micro ? ` — ${fmtStatus(micro)}` : (done ? ' — Submitted ✓' : ' — Waiting…');
+      const div = document.createElement('div');
+      div.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:12px;';
+      div.innerHTML = `
+        <span style="width:8px;height:8px;border-radius:50%;background:${done ? 'var(--coord)' : 'var(--muted)'};flex-shrink:0;display:inline-block;"></span>
+        <span class="mono" style="color:${done ? 'var(--coord)' : 'var(--text)'}">${cid}</span>
+        <span class="mono" style="color:var(--muted);font-size:11px">${stateLabel}</span>`;
+      tracker.appendChild(div);
+    });
+  }
+
+  // Elapsed time: reset when round changes
+  if (d.round !== updateRoundProgressPanel._lastRound) {
+    updateRoundProgressPanel._lastRound = d.round;
+    _roundStartedAt = Date.now();
+    clearInterval(_elapsedTimer);
+    _elapsedTimer = setInterval(() => {
+      if (!elapsedEl) return;
+      const secs = Math.floor((Date.now() - _roundStartedAt) / 1000);
+      const m = String(Math.floor(secs / 60)).padStart(2, '0');
+      const s = String(secs % 60).padStart(2, '0');
+      elapsedEl.textContent = `Round ${d.round || '—'} · ${m}:${s}`;
+    }, 1000);
+  }
+}
+updateRoundProgressPanel._lastRound = -1;
 
 function updateLiveLeaderboard(lb) {
   const tbody = el('live-lb-body');
@@ -1487,12 +1582,25 @@ function startClientPolling() {
         }
       }
       
-      // Keep logging for new rounds
+      // Keep logging for new rounds and micro-state changes
+      const currentMicro = d.micro_status || d.round_status;
       if (d.current_round !== lastRound && d.current_round > 0) {
-        if (d.round_status === 'active') {
-          log('client-log', `Round ${d.current_round} — training locally…`, 'round');
-        }
         lastRound = d.current_round;
+      }
+      // Log micro-state transitions
+      if (currentMicro !== S._lastClientMicro) {
+        S._lastClientMicro = currentMicro;
+        const roundLabel = d.current_round > 0 ? ` (Round ${d.current_round})` : '';
+        if (currentMicro === 'downloading')
+          log('client-log', `⬇ Downloading global model${roundLabel}...`, 'info');
+        else if (currentMicro === 'training' || (currentMicro === 'active' && d.round_status === 'active'))
+          log('client-log', `🧠 Training locally${roundLabel}...`, 'round');
+        else if (currentMicro === 'uploading')
+          log('client-log', `⬆ Sending weights to coordinator${roundLabel}...`, 'info');
+        else if (currentMicro === 'aggregating')
+          log('client-log', `⏳ Waiting — coordinator is running FedAvg${roundLabel}...`, 'info');
+        else if (currentMicro === 'idle' && d.round_status !== 'done')
+          log('client-log', `💤 Idle — waiting for next round${roundLabel}...`, 'info');
       }
 
     } catch { /* silent */ }
@@ -1724,6 +1832,11 @@ function fmtStatus(s) {
     active:              'Training active',
     aggregating:         'Aggregating',
     done:                'Complete',
+    // Micro-states
+    idle:                'Idle',
+    downloading:         'Downloading model',
+    training:            'Training locally',
+    uploading:           'Sending weights',
   };
   return map[s] ?? (s ? s.replace(/_/g, ' ') : 'Idle');
 }

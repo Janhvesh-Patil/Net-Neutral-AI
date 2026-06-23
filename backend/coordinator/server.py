@@ -80,6 +80,9 @@ data_shards = {}      # {client_id: DataFrame} - in-memory cache of divided data
 uploaded_dataset_path = os.path.join(COORDINATOR_DIR, 'uploaded_dataset.csv')
 model_downloaded = False  # Flag to track if coordinator has downloaded the final model
 
+# Thread safety lock — protects all global state mutations across concurrent requests
+state_lock = threading.Lock()
+
 # Cache for evaluation
 _cached_val_loader = None
 
@@ -214,8 +217,8 @@ def _process_round_completion(current_round_copy, round_start_time_copy, weights
 def check_round_completion():
     global current_round, round_status, global_accuracy, round_start_time
 
-    # Don't check for completion if waiting for clients or distributing data
-    if round_status in ['waiting_for_clients', 'data_distributing']:
+    # Only block aggregation if we haven't started distributing data yet
+    if round_status in ['waiting_for_clients']:
         return
 
     if len(submitted_weights) >= len(registered_clients) > 0:
@@ -279,7 +282,7 @@ def get_model():
 @app.route('/submit', methods=['POST'])
 def submit():
     """Receives local weights and metadata via multipart form-data [cite: 1, 113-115]."""
-    global round_status
+    global round_status, submitted_weights, submitted_samples
     
     client_id = request.form['client_id']
     if  not client_id:
@@ -299,6 +302,12 @@ def submit():
             time_seconds = float(request.form['time_seconds'])
         except (ValueError, TypeError):
             return jsonify({'error': 'Invalid time_seconds'}), 400
+
+        # Safety fix: if weights arrive while status is still data_distributing
+        # (e.g. shard was fetched but transition didn't fire), unblock the state machine.
+        if round_status == 'data_distributing':
+            round_status = 'active'
+            print(f"[Coordinator] Safety: submit received while data_distributing. Status → active.")
     
     
         # Save the binary weight file temporarily in the absolute dir [cite: 1, 117-118]
@@ -385,6 +394,15 @@ def api_client_status(client_id):
     submitted = credits.get_submitted_clients(current_round)
     round_history = credits.get_round_history(client_id)
 
+    # Map coordinator-level statuses that don't make sense for individual clients
+    _client_status_map = {
+        'data_distributing':   'idle',
+        'waiting_for_clients': 'idle',
+    }
+    micro = client_micro_states.get(client_id)
+    if micro is None:
+        micro = _client_status_map.get(round_status, round_status)
+
     return jsonify({
         'client_id': client_id,
         'ip_address': client.ip_address,
@@ -392,7 +410,7 @@ def api_client_status(client_id):
         'total_credits': total_credits,
         'current_round': current_round,
         'round_status': round_status,
-        'micro_status': client_micro_states.get(client_id, round_status),
+        'micro_status': micro,
         'total_rounds': TOTAL_ROUNDS,
         'has_submitted_this_round': client_id in submitted,
         'global_accuracy': global_accuracy,
@@ -566,15 +584,17 @@ def get_data_shard():
 
         print(f"[Coordinator] Data shard sent to {client_id}")
 
-        # Check if all clients have received data
-        all_received = all(
-            client_registry.get(cid, {}).get('data_received', False)
-            for cid in data_shards.keys()
-        )
-
-        if all_received and round_status == 'data_distributing':
-            round_status = 'active'
-            print(f"[Coordinator] All clients received data. Starting training...")
+        # Transition to 'active' immediately when the FIRST client requests a shard.
+        # Previously this waited for ALL clients, which caused a deadlock if
+        # client_registry was wiped by a server restart.
+        with state_lock:
+            if round_status == 'data_distributing':
+                round_status = 'active'
+                print(f"[Coordinator] Data served to {client_id}. Status → active. Training underway.")
+                broadcast_event('sys_log', {
+                    'message': f'Data shard sent to {client_id}. Training is now active.',
+                    'level': 'info'
+                })
 
         return csv_data, 200, {'Content-Disposition': 'attachment; filename="data_shard.csv"'}
 

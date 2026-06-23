@@ -1863,9 +1863,9 @@ function updateStatusVisualizer(status, prefix = '') {
   if (status === 'training' || status === 'active') {
     if(active) active.style.display = 'block';
     label.textContent = 'Training Locally...';
-  } else if (status === 'downloading') {
+  } else if (status === 'downloading' || status === 'data_distributing') {
     if(dl) dl.style.display = 'block';
-    label.textContent = 'Downloading Model...';
+    label.textContent = status === 'data_distributing' ? 'Receiving data shard...' : 'Downloading Model...';
   } else if (status === 'uploading') {
     if(ul) ul.style.display = 'block';
     label.textContent = 'Sending Weights...';
@@ -1874,7 +1874,7 @@ function updateStatusVisualizer(status, prefix = '') {
     label.textContent = 'Coordinator Aggregating...';
   } else if (status === 'done') {
     idle.style.display = 'block';
-    label.textContent = 'Training Complete';
+    label.textContent = 'Training Complete ✓';
   } else {
     idle.style.display = 'block';
     label.textContent = 'Waiting...';
@@ -1914,19 +1914,37 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 document.addEventListener('DOMContentLoaded', () => {
   showScreen('screen-landing');
 
-  /*
-   *
-   *   (async () => {
-   *     const { data: { session } } = await sb.auth.getSession();
-   *     if (session) {
-   *       S.sbSession = session;
-   *       const { data: profile } = await sb.from('profiles')
-   *         .select('role').eq('id', session.user.id).single();
-   *       S.role = profile?.role;
-   *       if (S.role === 'coordinator') showScreen('screen-coord-setup');
-   *       else if (S.role === 'client')  showScreen('screen-client-setup');
-   *     }
-   *   })();
-   */
+  // Inject bottom corner brackets on all hud-panels.
+  // CSS ::before/::after only cover top-left and top-right.
+  // We add two absolutely-positioned <span>s for bottom-left and bottom-right.
+  function injectCorners() {
+    document.querySelectorAll('.hud-panel').forEach(panel => {
+      if (panel.dataset.cornersInjected) return;
+      panel.dataset.cornersInjected = '1';
+
+      const isClient = panel.classList.contains('client-panel');
+      const color    = isClient ? 'var(--client)' : 'var(--coord)';
+      const glow     = isClient ? 'rgba(0,119,255,0.15)' : 'rgba(0,229,160,0.15)';
+      const base     = 'position:absolute;width:18px;height:18px;pointer-events:none;z-index:2;';
+      const bdrW     = '2px solid ';
+
+      const bl = document.createElement('span');
+      bl.style.cssText = `${base}bottom:-2px;left:-2px;border-bottom:${bdrW}${color};border-left:${bdrW}${color};border-radius:0 0 0 2px;box-shadow:-2px 2px 8px ${glow};`;
+
+      const br = document.createElement('span');
+      br.style.cssText = `${base}bottom:-2px;right:-2px;border-bottom:${bdrW}${color};border-right:${bdrW}${color};border-radius:0 0 2px 0;box-shadow:2px 2px 8px ${glow};`;
+
+      panel.appendChild(bl);
+      panel.appendChild(br);
+    });
+  }
+
+  // Run once on load, then re-run on any screen change (new panels may appear)
+  injectCorners();
+  const _origShow = window.showScreen;
+  window.showScreen = function(id) {
+    _origShow(id);
+    setTimeout(injectCorners, 50);
+  };
 });
  

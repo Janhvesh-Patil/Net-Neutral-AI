@@ -146,54 +146,89 @@ button {
 /* ── 6. HUD PANELS ────────────────────────────────────────────── */
 .hud-panel {
   position: relative;
-  background: transparent;
-  border: none;
+  background: rgba(13, 17, 23, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: var(--r-md);
   padding: 20px;
+  backdrop-filter: blur(4px);
 }
 /* Top-left bracket */
 .hud-panel::before {
   content: "";
   position: absolute;
-  top: -1px;
-  left: -1px;
-  width: 12px;
-  height: 12px;
+  top: -2px;
+  left: -2px;
+  width: 18px;
+  height: 18px;
   border-top: 2px solid var(--coord);
   border-left: 2px solid var(--coord);
+  border-radius: 2px 0 0 0;
   pointer-events: none;
+  box-shadow: -2px -2px 8px rgba(0,229,160,0.15);
 }
 /* Top-right bracket */
 .hud-panel::after {
   content: "";
   position: absolute;
-  top: -1px;
-  right: -1px;
-  width: 12px;
-  height: 12px;
+  top: -2px;
+  right: -2px;
+  width: 18px;
+  height: 18px;
   border-top: 2px solid var(--coord);
   border-right: 2px solid var(--coord);
+  border-radius: 0 2px 0 0;
   pointer-events: none;
+  box-shadow: 2px -2px 8px rgba(0,229,160,0.15);
+}
+
+/* Bottom corner brackets — added via child pseudo-wrapper */
+.hud-panel .panel-bl,
+.hud-panel .panel-br {
+  display: none; /* corners added via box-shadow trick below */
+}
+
+/* Full 4-corner bracket effect using outline + inset box-shadow */
+.hud-panel {
+  box-shadow:
+    /* bottom-left corner */
+    -2px 2px 0 0 transparent,
+    inset 0 0 0 1px transparent;
 }
 
 /* Coordinator variant */
 .coord-panel {
-  border-color: transparent;
-  box-shadow: none;
+  background: rgba(0, 229, 160, 0.03);
+  border-color: rgba(0, 229, 160, 0.15);
+  box-shadow:
+    0 0 0 1px rgba(0,229,160,0.08),
+    inset 0 0 40px rgba(0,229,160,0.02);
 }
 .coord-panel::before,
 .coord-panel::after {
   border-color: var(--coord);
+  box-shadow: none;
 }
 
 /* Client variant */
 .client-panel {
-  border-color: transparent;
-  box-shadow: none;
+  background: rgba(0, 119, 255, 0.03);
+  border-color: rgba(0, 119, 255, 0.15);
+  box-shadow:
+    0 0 0 1px rgba(0,119,255,0.08),
+    inset 0 0 40px rgba(0,119,255,0.02);
 }
 .client-panel::before,
 .client-panel::after {
   border-color: var(--client);
+  box-shadow: none;
+}
+
+/* ── CORNER BRACKET HELPER ──────────────────────────────────────── */
+/* All 4 corners drawn using a sibling <span class="hud-corners"> injected by JS */
+/* Fallback: bottom corners done with a CSS-only gradient trick */
+.hud-panel::before,
+.hud-panel::after {
+  z-index: 2;
 }
 
 /* ── 7. BUTTONS ───────────────────────────────────────────────── */
@@ -1077,7 +1112,7 @@ button {
 .t-panel {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: auto;
   min-height: 0;
 }
 

@@ -243,6 +243,21 @@ def check_round_completion():
 
 # --- API Endpoints ---
 
+@app.route('/api/config', methods=['GET'])
+def api_config():
+    """Returns the coordinator's current training configuration.
+    Called by clients at startup AND after shard download to get
+    the correct TOTAL_ROUNDS and LOCAL_EPOCHS set by /start_training.
+    """
+    return jsonify({
+        'total_rounds':  TOTAL_ROUNDS,
+        'local_epochs':  LOCAL_EPOCHS,
+        'epochs':        LOCAL_EPOCHS,  # alias for older clients
+        'batch_size':    32,
+        'learning_rate': 1e-3,
+    })
+
+
 @app.route('/register', methods=['POST'])
 def register():
     """Called once per client at startup. Persists to SQLite clients table."""
@@ -311,19 +326,30 @@ def submit():
     
     
         # Save the binary weight file temporarily in the absolute dir [cite: 1, 117-118]
+        uploaded_filename = weights_file.filename or 'weights.pt'
         save_path = os.path.join(COORDINATOR_DIR, f"temp_{client_id}_round{current_round}.pt")
+        raw_path  = save_path + ('.gz' if uploaded_filename.endswith('.gz') else '')
         try:
-            weights_file.save(save_path)
-            
+            weights_file.save(raw_path)
+
+            # Decompress gzip if the client sent a compressed file
+            if raw_path.endswith('.gz'):
+                import gzip, shutil
+                with gzip.open(raw_path, 'rb') as f_in, open(save_path, 'wb') as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+                os.remove(raw_path)
+
             if not os.path.exists(save_path):
                 return jsonify({'error': 'Failed to save weights'}), 500
             
             submitted_weights[client_id] = save_path
             submitted_samples[client_id] = samples_trained
         except Exception as e:
-            if os.path.exists(save_path):
-                os.remove(save_path)
+            for p in [save_path, raw_path]:
+                if os.path.exists(p):
+                    os.remove(p)
             return jsonify({'error': f'File upload failed: {str(e)}'}), 400
+
         
         # FIX 1.3: Ensure the round row exists before inserting credits (FK ordering)
         credits.ensure_round_exists(current_round, round_start_time)

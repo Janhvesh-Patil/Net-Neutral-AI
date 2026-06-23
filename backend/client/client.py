@@ -112,13 +112,28 @@ def submit_weights(
     READ_TIMEOUT    = 300   # 5 min for server to receive the whole file
     MAX_ATTEMPTS    = 4
 
+    # Gzip-compress the .pt file before upload.
+    # PyTorch checkpoints compress extremely well (~60-70% reduction).
+    # Smaller payload = less time on the wire = fewer Render write timeouts.
+    import gzip, shutil
+    compressed_path = weights_path + '.gz'
+    try:
+        with open(weights_path, 'rb') as f_in, gzip.open(compressed_path, 'wb', compresslevel=6) as f_out:
+            shutil.copyfileobj(f_in, f_out)
+        upload_path = compressed_path
+        upload_filename = 'weights.pt.gz'
+    except Exception:
+        # If compression fails for any reason, fall back to raw file
+        upload_path = weights_path
+        upload_filename = 'weights.pt'
+
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
             print_status(f"Submitting weights to coordinator (attempt {attempt}/{MAX_ATTEMPTS})...")
-            with open(weights_path, 'rb') as f:
+            with open(upload_path, 'rb') as f:
                 response = requests.post(
                     url,
-                    files={'weights': f},
+                    files={'weights': (upload_filename, f, 'application/octet-stream')},
                     data={
                         'client_id':       client_id,
                         'samples_trained': samples_trained,
@@ -142,6 +157,13 @@ def submit_weights(
                 raise RuntimeError(f"Failed to submit weights after {MAX_ATTEMPTS} attempts: {e}")
         except requests.exceptions.RequestException as e:
             raise RuntimeError(f"Failed to submit weights: {e}")
+    finally:
+        # Always clean up the compressed file
+        if os.path.exists(compressed_path):
+            try:
+                os.remove(compressed_path)
+            except Exception:
+                pass
 
 
 
@@ -366,6 +388,22 @@ def run_client(client_id: str, data_dir: str, vocab_path: str) -> None:
         )
 
     print_status(f"[OK] Data loaded. Shard size: {len(dataloader.dataset):,} samples")
+
+    # ── Re-fetch config now that /start_training has been called ──────────────
+    # The first fetch (Step 0) runs BEFORE the user clicks Launch, so the
+    # coordinator still has its previous session's TOTAL_ROUNDS / LOCAL_EPOCHS.
+    # By the time the shard is downloaded, /start_training has already updated
+    # TOTAL_ROUNDS and LOCAL_EPOCHS on the coordinator.
+    try:
+        resp = requests.get(f"{config.BASE_URL}/api/config", timeout=10)
+        resp.raise_for_status()
+        srv_cfg = resp.json()
+        config.TOTAL_ROUNDS = srv_cfg.get('total_rounds', config.TOTAL_ROUNDS)
+        config.LOCAL_EPOCHS = srv_cfg.get('local_epochs',  config.LOCAL_EPOCHS)
+        print_status(f"[OK] Config synced from coordinator: "
+                     f"{config.TOTAL_ROUNDS} rounds, {config.LOCAL_EPOCHS} epochs/round")
+    except Exception as e:
+        print_status(f"[WARNING] Config re-sync failed: {e}. Continuing with current values.")
 
     # ── Step 4: Training loop ────────────────────────────────────────────────────
     for round_num in range(current_round, config.TOTAL_ROUNDS + 1):

@@ -167,13 +167,10 @@ function connectSSE() {
       liveLog(`Final accuracy: ${normPct(d.final_accuracy).toFixed(2)}%`, 'done');
       el('live-status-pill').textContent = fmtStatus('done');
       // BUG-15 FIX: guard against SSE + polling both calling onTrainingDone
-      if (!S._trainingDoneFired) {
-        S._trainingDoneFired = true;
-        onTrainingDone({
-          global_accuracy: d.final_accuracy,
-          round: d.total_rounds,
-        });
-      }
+      onTrainingDone({
+        global_accuracy: d.final_accuracy,
+        round: d.total_rounds,
+      });
     });
 
     es.addEventListener('client_joined', (e) => {
@@ -212,6 +209,11 @@ function handleStatusUpdate(d) {
   setText('live-round', d.round ?? '—');
   if (d.total_rounds) setText('live-total', d.total_rounds);
   el('live-status-pill').textContent = fmtStatus(d.round_status);
+  
+  // Update the Phase Banner in the center column
+  if (typeof updateRoundProgressPanel === 'function') {
+    updateRoundProgressPanel(d);
+  }
   
   // Toggle active-training glow animations
   document.querySelectorAll('.coord-panel, .client-panel').forEach(p => {

@@ -1114,39 +1114,67 @@ function getPhaseInfo(status) {
 }
 
 function updateRoundProgressPanel(d) {
-  const iconEl   = el('live-phase-icon');
-  const titleEl  = el('live-phase-title');
-  const descEl   = el('live-phase-desc');
-  const tracker  = el('live-client-tracker');
+  const iconEl    = el('live-phase-icon');
+  const titleEl   = el('live-phase-title');
+  const descEl    = el('live-phase-desc');
+  const tracker   = el('live-client-tracker');
   const elapsedEl = el('live-elapsed');
+  const barEl     = el('live-round-bar');
+  const fracEl    = el('live-round-frac');
+  const countEl   = el('node-count-label');
   if (!iconEl || !titleEl || !descEl) return;
 
+  // Phase text — update on every tick
   const phase = getPhaseInfo(d.round_status);
   iconEl.textContent  = phase.icon;
   titleEl.textContent = phase.title;
   titleEl.style.color = phase.color;
   descEl.textContent  = phase.desc;
 
-  // Client submission tracker
-  if (tracker && d.clients && d.clients.length) {
-    const submitted = new Set(d.clients_submitted || []);
-    tracker.innerHTML = '';
-    d.clients.forEach(c => {
-      const cid   = c.id || c.client_id || c;
-      const done  = submitted.has(cid);
-      const micro = (d.client_micro_states || {})[cid] || '';
-      const stateLabel = micro ? ` — ${fmtStatus(micro)}` : (done ? ' — Submitted ✓' : ' — Waiting…');
-      const div = document.createElement('div');
-      div.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:12px;';
-      div.innerHTML = `
-        <span style="width:8px;height:8px;border-radius:50%;background:${done ? 'var(--coord)' : 'var(--muted)'};flex-shrink:0;display:inline-block;"></span>
-        <span class="mono" style="color:${done ? 'var(--coord)' : 'var(--text)'}">${cid}</span>
-        <span class="mono" style="color:var(--muted);font-size:11px">${stateLabel}</span>`;
-      tracker.appendChild(div);
-    });
+  // Round progress bar
+  const totalR = d.total_rounds || 0;
+  const curR   = d.round || 0;
+  if (barEl && fracEl && totalR > 0) {
+    const pct = Math.min(100, (curR / totalR) * 100);
+    barEl.style.width = pct + '%';
+    fracEl.textContent = `${curR} / ${totalR}`;
   }
 
-  // Elapsed time: reset when round changes
+  // Node tracker — rich card format
+  if (tracker) {
+    const clients = d.clients || [];
+    const submitted = new Set(d.clients_submitted || []);
+    const microStates = d.client_micro_states || {};
+
+    if (countEl) countEl.textContent = `${clients.length} NODE${clients.length !== 1 ? 'S' : ''}`;
+
+    if (clients.length === 0) {
+      tracker.innerHTML = `<div class="mono text-muted" style="font-size:11px">Waiting for clients…</div>`;
+    } else {
+      tracker.innerHTML = '';
+      clients.forEach(c => {
+        const cid    = c.id || c.client_id || c;
+        const isSubmitted = submitted.has(cid);
+        const micro  = microStates[cid] || '';
+        const isTraining = micro === 'training' || micro === 'active';
+        const dotCls = isSubmitted ? 'submitted' : isTraining ? 'training' : 'idle';
+        const statusLabel = isSubmitted ? 'Submitted ✓'
+                          : micro ? fmtStatus(micro)
+                          : fmtStatus(d.round_status) || 'Waiting';
+        const card = document.createElement('div');
+        card.className = 'node-card';
+        card.innerHTML = `
+          <span class="node-dot ${dotCls}"></span>
+          <div class="node-info">
+            <div class="node-id">${cid}</div>
+            <div class="node-status-lbl">${statusLabel}</div>
+          </div>`;
+        tracker.appendChild(card);
+      });
+    }
+  }
+
+  // Elapsed timer — reset only when round number changes
   if (d.round !== updateRoundProgressPanel._lastRound) {
     updateRoundProgressPanel._lastRound = d.round;
     _roundStartedAt = Date.now();
@@ -1156,7 +1184,7 @@ function updateRoundProgressPanel(d) {
       const secs = Math.floor((Date.now() - _roundStartedAt) / 1000);
       const m = String(Math.floor(secs / 60)).padStart(2, '0');
       const s = String(secs % 60).padStart(2, '0');
-      elapsedEl.textContent = `Round ${d.round || '—'} · ${m}:${s}`;
+      elapsedEl.textContent = `${m}:${s}`;
     }, 1000);
   }
 }

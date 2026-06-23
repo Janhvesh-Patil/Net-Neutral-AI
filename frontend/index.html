@@ -498,118 +498,135 @@
         </div>
       </div>
 
-      <!-- 5-panel training grid -->
-      <div class="training-grid" style="grid-template-columns: 1fr 1fr 1fr;">
 
-        <!-- Panel A: Accuracy chart -->
-        <div class="t-panel hud-panel coord-panel" id="panel-chart">
-          <div class="panel-head">
-            <h3 class="panel-title mono">ACCURACY / ROUND</h3>
-            <span class="live-ind">
+      <!-- ══ NEW 3-COLUMN MISSION CONTROL LAYOUT ══ -->
+      <div class="live-mc-grid">
+
+        <!-- ══ LEFT COLUMN: Nodes + Leaderboard ══ -->
+        <div class="live-col live-col-left">
+
+          <!-- Connected Nodes -->
+          <div class="t-panel hud-panel coord-panel live-mc-panel">
+            <div class="panel-head">
+              <h3 class="panel-title mono">CONNECTED NODES</h3>
+              <span class="mono small-caps text-muted" id="node-count-label" style="font-size:10px">0 NODES</span>
+            </div>
+            <div id="live-client-tracker" style="display:flex;flex-direction:column;gap:8px;padding:4px 0">
+              <div class="mono text-muted" style="font-size:11px">Waiting for clients…</div>
+            </div>
+          </div>
+
+          <!-- Network graph (compact) -->
+          <div class="t-panel hud-panel live-mc-panel" id="panel-network" style="flex:0 0 160px;">
+            <div class="panel-head">
+              <h3 class="panel-title mono">NETWORK</h3>
+            </div>
+            <canvas id="network-canvas" style="width:100%;height:120px;"></canvas>
+          </div>
+
+          <!-- Session Leaderboard -->
+          <div class="t-panel hud-panel live-mc-panel" id="panel-lb">
+            <div class="panel-head">
+              <h3 class="panel-title mono">LEADERBOARD</h3>
+            </div>
+            <table class="data-table lb-table" id="live-lb-table">
+              <thead><tr><th>#</th><th>CLIENT</th><th>PTS</th></tr></thead>
+              <tbody id="live-lb-body">
+                <tr class="empty-row"><td colspan="3">Waiting for submissions…</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div><!-- /left col -->
+
+        <!-- ══ CENTER COLUMN: Phase + Chart + Epoch ══ -->
+        <div class="live-col live-col-center">
+
+          <!-- Phase Banner (the main focus) -->
+          <div class="t-panel hud-panel coord-panel live-mc-panel live-phase-panel" id="panel-round-progress">
+            <div style="display:flex;align-items:center;gap:20px;">
+              <div class="live-phase-icon" id="live-phase-icon">⏳</div>
+              <div style="flex:1">
+                <div class="live-phase-title" id="live-phase-title">Initialising…</div>
+                <div class="live-phase-desc" id="live-phase-desc">Waiting for the training session to begin.</div>
+              </div>
+              <div style="text-align:right;flex-shrink:0">
+                <div class="mono" style="font-size:11px;color:var(--muted)">ELAPSED</div>
+                <div class="mono" id="live-elapsed" style="font-size:14px;color:var(--coord)">—</div>
+              </div>
+            </div>
+            <!-- Round progress bar -->
+            <div style="margin-top:16px;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                <span class="mono" style="font-size:11px;color:var(--muted)">ROUND PROGRESS</span>
+                <span class="mono" style="font-size:11px;color:var(--coord)" id="live-round-frac">0 / —</span>
+              </div>
+              <div style="height:4px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;">
+                <div id="live-round-bar" style="height:100%;width:0%;background:var(--coord);border-radius:2px;transition:width 0.6s ease;"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Accuracy chart -->
+          <div class="t-panel hud-panel coord-panel live-mc-panel" id="panel-chart" style="flex:1;min-height:200px;">
+            <div class="panel-head">
+              <h3 class="panel-title mono">ACCURACY / ROUND</h3>
+              <span class="live-ind">
+                <span class="live-dot"></span>
+                <span class="mono small-caps" style="font-size:10px;color:var(--muted)">LIVE</span>
+              </span>
+            </div>
+            <div class="chart-wrap">
+              <canvas id="accuracy-chart"></canvas>
+            </div>
+          </div>
+
+          <!-- Epoch metrics -->
+          <div class="t-panel hud-panel coord-panel live-mc-panel" id="panel-epoch-metrics" style="flex:0 0 auto;">
+            <div class="panel-head">
+              <h3 class="panel-title mono">EPOCH METRICS</h3>
+              <span class="live-ind">
+                <span class="live-dot"></span>
+                <span class="mono small-caps" style="font-size:10px;color:var(--muted)">REAL-TIME</span>
+              </span>
+            </div>
+            <div class="epoch-tabs mono" id="epoch-tabs">
+              <button class="epoch-tab active" data-round="1">Round 1</button>
+            </div>
+            <div class="epoch-metrics-header mono" style="margin-top:0">
+              <span style="flex:0.5">EPOCH</span>
+              <span style="flex:1">CLIENT</span>
+              <span style="flex:1">LOSS</span>
+              <span style="flex:1">ACCURACY</span>
+              <span style="flex:1">SAMPLES</span>
+            </div>
+            <div class="epoch-metrics-scroll" id="epoch-metrics-panel" style="display:block;max-height:120px;">
+              <div class="epoch-metrics-empty mono text-muted" id="epoch-metrics-empty">
+                Waiting for epoch data from training clients…
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /center col -->
+
+        <!-- ══ RIGHT COLUMN: System Log ══ -->
+        <div class="live-col live-col-right">
+          <div class="t-panel hud-panel live-mc-panel" id="panel-log" style="flex:1;min-height:0;">
+            <div class="panel-head">
+              <h3 class="panel-title mono">SYSTEM LOG</h3>
               <span class="live-dot"></span>
-              <span class="mono small-caps" style="font-size:10px;color:var(--muted)">LIVE</span>
-            </span>
+            </div>
+            <div class="log-box log-box-fill" id="live-log" style="flex:1;min-height:0;">
+              <div class="log-line info">[SYSTEM] Live training view loaded.</div>
+            </div>
           </div>
-          <div class="chart-wrap">
-            <canvas id="accuracy-chart"></canvas>
-          </div>
-        </div>
+        </div><!-- /right col -->
 
-        <!-- Panel B: Network graph -->
-        <div class="t-panel hud-panel" id="panel-network">
-          <div class="panel-head">
-            <h3 class="panel-title mono">NETWORK TOPOLOGY</h3>
-            <span class="mono small-caps text-muted" id="node-count-label" style="font-size:10px">0 NODES</span>
-          </div>
-          <canvas id="network-canvas"></canvas>
-        </div>
-
-        <!-- Panel C: Round leaderboard -->
-        <div class="t-panel hud-panel" id="panel-lb">
-          <div class="panel-head">
-            <h3 class="panel-title mono">SESSION LEADERBOARD</h3>
-          </div>
-          <!--
-            INTEGRATION:
-            Populated from GET /status response → leaderboard array
-            [{ client_id, points_earned, samples_trained }]
-            TRD v2.1: same structure, from GET /status/{job_id}
-          -->
-          <table class="data-table lb-table" id="live-lb-table">
-            <thead>
-              <tr><th>#</th><th>CLIENT</th><th>SAMPLES</th><th>PTS</th></tr>
-            </thead>
-            <tbody id="live-lb-body">
-              <tr class="empty-row"><td colspan="4">Waiting for submissions…</td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Panel D: System log -->
-        <div class="t-panel hud-panel" id="panel-log">
-          <div class="panel-head">
-            <h3 class="panel-title mono">SYSTEM LOG</h3>
-            <span class="live-dot"></span>
-          </div>
-          <div class="log-box log-box-fill" id="live-log">
-            <div class="log-line info">[SYSTEM] Live training view loaded.</div>
-          </div>
-        </div>
-
-        <!-- Panel E: Round Progress -->
-        <div class="t-panel hud-panel coord-panel" id="panel-round-progress">
-          <div class="panel-head">
-            <h3 class="panel-title mono">ROUND PROGRESS</h3>
-            <span class="mono text-muted" id="live-elapsed" style="font-size:11px">—</span>
-          </div>
-          <!-- Current phase explanation -->
-          <div id="live-phase-box" style="padding:12px 0 10px">
-            <div class="live-phase-icon" id="live-phase-icon">⏳</div>
-            <div class="live-phase-title" id="live-phase-title">Initialising…</div>
-            <div class="live-phase-desc" id="live-phase-desc">Waiting for clients to connect and the training session to begin.</div>
-          </div>
-          <!-- Per-client submission tracker -->
-          <div class="panel-head" style="margin-top:8px; border-top:1px solid rgba(255,255,255,0.06); padding-top:10px">
-            <h3 class="panel-title mono" style="font-size:10px">CLIENT SUBMISSIONS</h3>
-          </div>
-          <div id="live-client-tracker" style="display:flex; flex-direction:column; gap:6px; padding:4px 0">
-            <div class="mono text-muted" style="font-size:11px">Waiting for clients…</div>
-          </div>
-        </div>
-
-      </div><!-- /training-grid -->
-
-      <!-- Panel E: Epoch-level training metrics (SSE-fed) -->
-      <div class="t-panel-wide hud-panel coord-panel" id="panel-epoch-metrics">
-        <div class="panel-head">
-          <h3 class="panel-title mono">EPOCH TRAINING METRICS</h3>
-          <span class="live-ind">
-            <span class="live-dot"></span>
-            <span class="mono small-caps" style="font-size:10px;color:var(--muted)">REAL-TIME</span>
-          </span>
-        </div>
-        
-        <div class="epoch-tabs mono" id="epoch-tabs">
-          <!-- Populated by SSE rounds -->
-          <button class="epoch-tab active" data-round="1">Round 1</button>
-        </div>
-
-        <div class="epoch-metrics-header mono" style="margin-top:0">
-          <span style="flex:0.5">EPOCH</span>
-          <span style="flex:1">CLIENT</span>
-          <span style="flex:1">LOSS</span>
-          <span style="flex:1">ACCURACY</span>
-          <span style="flex:1">SAMPLES</span>
-        </div>
-        <div class="epoch-metrics-scroll" id="epoch-metrics-panel" style="display:block">
-          <div class="epoch-metrics-empty mono text-muted" id="epoch-metrics-empty">
-            Waiting for epoch data from training clients…
-          </div>
-        </div>
-      </div>
+      </div><!-- /live-mc-grid -->
 
     </div><!-- /dash-layout -->
   </div><!-- /screen-live-training -->
+
 
 
   <!-- ╔══════════════════════════════════════════════════════════╗

@@ -105,27 +105,44 @@ def submit_weights(
 
     url = f"{config.BASE_URL}/submit"
 
-    try:
-        print_status("Submitting weights to coordinator...")
+    # Tuple timeout: (connect_secs, read_secs).
+    # A plain int like timeout=60 caps BOTH phases, causing write-timeouts
+    # when uploading large .pt files over slow/congested Render connections.
+    CONNECT_TIMEOUT = 10
+    READ_TIMEOUT    = 300   # 5 min for server to receive the whole file
+    MAX_ATTEMPTS    = 4
 
-        with open(weights_path, 'rb') as f:
-            files = {'weights': f}
-            data = {
-                'client_id': client_id,
-                'samples_trained': samples_trained,
-                'time_seconds': time_seconds,
-            }
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            print_status(f"Submitting weights to coordinator (attempt {attempt}/{MAX_ATTEMPTS})...")
+            with open(weights_path, 'rb') as f:
+                response = requests.post(
+                    url,
+                    files={'weights': f},
+                    data={
+                        'client_id':       client_id,
+                        'samples_trained': samples_trained,
+                        'time_seconds':    time_seconds,
+                    },
+                    timeout=(CONNECT_TIMEOUT, READ_TIMEOUT),
+                )
+                response.raise_for_status()
 
-            response = requests.post(url, files=files, data=data, timeout=60)
-            response.raise_for_status()
+            result = response.json()
+            print_status(f"[OK] Submission successful. Credits earned: {result.get('credits', 0)}")
+            return result
 
-        result = response.json()
-        print_status(f"[OK] Submission successful. Credits earned: {result.get('credits', 0)}")
+        except (requests.exceptions.Timeout,
+                requests.exceptions.ConnectionError) as e:
+            wait = 2 ** attempt   # 2 → 4 → 8 → 16 s
+            if attempt < MAX_ATTEMPTS:
+                print_status(f"[WARNING] Upload failed (attempt {attempt}): {e}. Retrying in {wait}s...")
+                time.sleep(wait)
+            else:
+                raise RuntimeError(f"Failed to submit weights after {MAX_ATTEMPTS} attempts: {e}")
+        except requests.exceptions.RequestException as e:
+            raise RuntimeError(f"Failed to submit weights: {e}")
 
-        return result
-
-    except requests.exceptions.RequestException as e:
-        raise RuntimeError(f"Failed to submit weights: {e}")
 
 
 def poll_for_next_round(current_round: int) -> dict:

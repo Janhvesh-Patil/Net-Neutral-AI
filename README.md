@@ -92,7 +92,7 @@ Baseline checkpoint — pre-trained on 15,000 samples for 5 epochs on GPU:
 | 5 | **80.95%** | +0.10% |
 
 *Federated round results will be updated after demo recording.*
-*See `coordinator/pretrain_log.json` for full training metadata.*
+*See `pretrain_log.json` for full training metadata.*
 
 ---
 
@@ -131,8 +131,6 @@ net-neutral-ai/
 │   ├── pretrain_log.json # Training metadata from baseline run
 │   └── requirements.txt
 ├── data/
-│   ├── imdb_train.csv    # 40,000 training reviews (download separately)
-│   ├── imdb_test.csv     # 10,000 test reviews (download separately)
 │   └── vocab.json        # Shared vocabulary — 10,000 tokens (committed)
 ├── shared/
 │   └── config.py         # Coordinator IP, round count, hyperparameters
@@ -158,8 +156,8 @@ net-neutral-ai/
 ### Step 1 — Clone on all machines
 
 ```bash
-git clone https://github.com/Janhvesh-Patil/net-neutral-ai.git
-cd net-neutral-ai
+git clone https://github.com/Janhvesh-Patil/Net-Neutral-AI.git -b testing_site
+cd Net-Neutral-AI
 ```
 
 ### Step 2 — Create virtual environment
@@ -179,11 +177,10 @@ pip install -r coordinator/requirements.txt
 pip install -r client/requirements.txt
 ```
 
-### Step 4 — Download dataset
+### Step 4 — Upload dataset via Dashboard
 
-Download IMDb dataset from [HuggingFace](https://huggingface.co/datasets/ajaykarthick/imdb-movie-reviews) and place files in `data/`:
-- `data/imdb_train.csv` (40,000 rows)
-- `data/imdb_test.csv` (10,000 rows)
+The coordinator uses a dynamic 80/20 data split. Rather than downloading massive datasets manually, you simply upload a `.csv` file via the Coordinator's Web Dashboard. 
+The system will automatically partition 80% to distribute to clients and securely hold 20% on the coordinator for evaluation.
 
 `vocab.json` and `checkpoint.pt` are already committed — no need to regenerate them.
 

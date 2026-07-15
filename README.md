@@ -314,5 +314,3 @@ python e2e_test.py
 - Federated Learning: [McMahan et al., 2017](https://arxiv.org/abs/1602.05629)
 
 ---
-
-*Net-Neutral AI — GitHub DevDays Hackathon 2026*

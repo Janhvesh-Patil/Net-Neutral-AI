@@ -232,7 +232,7 @@ def download_data_shard(client_id: str, save_path: str, max_retries: int = 3) ->
     for attempt in range(1, max_retries + 1):
         try:
             print_status(f"Downloading data shard (attempt {attempt}/{max_retries})...")
-            response = requests.post(url, json=payload, timeout=120)
+            response = requests.post(url, json=payload, timeout=1000)
             response.raise_for_status()
 
             # Create directory if needed

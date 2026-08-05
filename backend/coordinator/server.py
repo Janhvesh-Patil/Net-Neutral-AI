@@ -8,10 +8,10 @@ from flask import Flask, request, jsonify, send_file, Response
 from flask_cors import CORS
 
 # Import internal modules
-from . import fedavg
-from . import credits
-from . import evaluate
-from . import data_distributor
+from backend.coordinator import fedavg
+from backend.coordinator import credits
+from backend.coordinator import evaluate
+from backend.coordinator import data_distributor
 import threading
 
 # Global state lock for thread safety
